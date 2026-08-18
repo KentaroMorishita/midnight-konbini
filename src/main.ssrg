@@ -738,7 +738,7 @@ fn quickStyle color: String -> html.Style = html.style {
   border: `1px solid ${color}`,
   borderRadius: "6px",
   background: "rgba(8,26,41,0.82)",
-  color,
+  color: color,
   cursor: "pointer",
   fontSize: "11px",
   fontWeight: "800"
@@ -793,7 +793,7 @@ fn taskRow icon: String -> label: String -> time: String -> color: String -> htm
     color: "#d5e4ef",
     fontSize: "11px"
   }) [
-    text (html.style { color }) icon,
+    text (html.style { color: color }) icon,
     text (html.style {}) label,
     text (html.style { color: "#8aa3b9" }) time
   ]
@@ -818,7 +818,7 @@ fn eventLine time: String -> icon: String -> label: String -> color: String -> h
     gridTemplateColumns: "42px 18px 1fr",
     gap: "5px",
     padding: "3px 0",
-    color,
+    color: color,
     fontSize: "10px"
   }) [
     text (html.style { color: "#8097ab" }) time,
