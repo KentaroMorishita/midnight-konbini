@@ -16,6 +16,10 @@ Production build:
 seseragi build .
 ```
 
+## Deployment
+
+`main` へのpushでGitHub ActionsがSeseragiのproduction buildを作成し、`VERCEL_TOKEN`が設定されていればVercelへproduction deployします。
+
 ## Current slice
 
 - 2D top-down convenience-store floor built from DOM elements
