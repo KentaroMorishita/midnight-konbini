@@ -1,0 +1,1 @@
+Pixel-art atlas assets for the store floor.
