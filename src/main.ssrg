@@ -46,16 +46,13 @@ let initialState: GameState = GameState {
   nightMode: True,
   flagged: False,
   recommended: False,
-  lastEvent: "23:45  配送が到着しました（冷凍食品）"
+  lastEvent: "配送が到着しました（冷凍食品）"
 }
 
 fn toggle value: Bool -> Bool = if value then False else True
-
 fn cap100 value: Int -> Int = if value > 100 then 100 else value
-
 fn floor0 value: Int -> Int = if value < 0 then 0 else value
-
-fn nextHour hour: Int -> Int = if hour >= 23 then 0 else hour + 1
+fn nextHour value: Int -> Int = if value >= 23 then 0 else value + 1
 
 fn advanceTime amount: Int -> state: GameState -> GameState =
   if state.minute + amount >= 60 then
@@ -135,9 +132,7 @@ fn dispatch state: MutableSignal<GameState> -> action: GameAction -> Task<Unit> 
   signals.update (update action) state
 
 fn timeText current: GameState -> String = `${current.hour}:${current.minute}`
-
 fn yen amount: Int -> String = `¥${amount}`
-
 fn percent amount: Int -> String = `${amount}%`
 
 let appStyle = html.style {
@@ -179,6 +174,24 @@ let panelStyle = html.style {
   overflow: "hidden"
 }
 
+let panelGapStyle = html.style {
+  marginTop: "8px",
+  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+  border: "1px solid #173b5a",
+  borderRadius: "10px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+  overflow: "hidden"
+}
+
+let storePanelStyle = html.style {
+  padding: "7px",
+  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+  border: "1px solid #173b5a",
+  borderRadius: "10px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+  overflow: "hidden"
+}
+
 let panelHeaderStyle = html.style {
   display: "flex",
   alignItems: "center",
@@ -194,9 +207,11 @@ let panelHeaderStyle = html.style {
 }
 
 let titleCardStyle = html.style {
-  ...panelStyle,
   padding: "14px 16px",
-  background: "radial-gradient(circle at 18% 18%, rgba(46,164,255,0.20), transparent 32%), linear-gradient(180deg, #081827, #06111d)"
+  background: "radial-gradient(circle at 18% 18%, rgba(46,164,255,0.20), transparent 32%), linear-gradient(180deg, #081827, #06111d)",
+  border: "1px solid #173b5a",
+  borderRadius: "10px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
 }
 
 let titleMainStyle = html.style {
@@ -217,32 +232,16 @@ let titleSubStyle = html.style {
 }
 
 let metricStyle = html.style {
-  ...panelStyle,
-  padding: "11px 13px"
+  padding: "11px 13px",
+  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+  border: "1px solid #173b5a",
+  borderRadius: "10px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
 }
 
-let metricLabelStyle = html.style {
-  margin: "0",
-  color: "#91a8bc",
-  fontSize: "11px",
-  fontWeight: "700"
-}
-
-let metricValueStyle = html.style {
-  margin: "7px 0 0",
-  color: "#f4f9ff",
-  fontSize: "24px",
-  lineHeight: "1",
-  fontWeight: "850",
-  letterSpacing: "0.01em"
-}
-
-let metricFootStyle = html.style {
-  margin: "7px 0 0",
-  color: "#6fd36c",
-  fontSize: "10px",
-  fontWeight: "700"
-}
+let metricLabelStyle = html.style { margin: "0", color: "#91a8bc", fontSize: "11px", fontWeight: "700" }
+let metricValueStyle = html.style { margin: "7px 0 0", color: "#f4f9ff", fontSize: "24px", lineHeight: "1", fontWeight: "850" }
+let metricFootStyle = html.style { margin: "7px 0 0", color: "#6fd36c", fontSize: "10px", fontWeight: "700" }
 
 let topActionsStyle = html.style {
   display: "grid",
@@ -302,30 +301,6 @@ let miniMapStyle = html.style {
   overflow: "hidden"
 }
 
-let miniMapRoomStyle = html.style {
-  position: "absolute",
-  left: "10%",
-  top: "12%",
-  width: "76%",
-  height: "70%",
-  border: "2px solid #258dd1",
-  boxShadow: "inset 0 0 20px rgba(37,141,209,0.10)"
-}
-
-fn miniDot left: String -> top: String -> color: String -> html.Html<Task<Unit>> =
-  html.div {
-    style: html.style {
-      position: "absolute",
-      left,
-      top,
-      width: "8px",
-      height: "8px",
-      borderRadius: "50%",
-      background: color,
-      boxShadow: `0 0 10px ${color}`
-    }
-  }
-
 fn metric label: String -> value: String -> foot: String -> html.Html<Task<Unit>> =
   html.div {
     style: metricStyle,
@@ -336,7 +311,14 @@ fn metric label: String -> value: String -> foot: String -> html.Html<Task<Unit>
     ]
   }
 
-fn topBar current: GameState -> html.Html<Task<Unit>> =
+fn topAction state: MutableSignal<GameState> -> label: String -> message: String -> html.Html<Task<Unit>> =
+  html.button {
+    style: iconButtonStyle,
+    onClick: dispatch state (Log message),
+    children: label
+  }
+
+fn topBar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
   html.div {
     style: topGridStyle,
     children: [
@@ -356,10 +338,10 @@ fn topBar current: GameState -> html.Html<Task<Unit>> =
       html.div {
         style: topActionsStyle,
         children: [
-          html.button { style: iconButtonStyle, children: "▥" },
-          html.button { style: iconButtonStyle, children: "✉" },
-          html.button { style: iconButtonStyle, children: "⚙" },
-          html.button { style: iconButtonStyle, children: "☰" }
+          topAction state "▥" "売上レポートを確認しました",
+          topAction state "✉" "メッセージを確認しました",
+          topAction state "⚙" "設定を確認しました",
+          topAction state "☰" "メニューを開きました"
         ]
       }
     ]
@@ -380,6 +362,43 @@ fn menuButton state: MutableSignal<GameState>
     ]
   }
 
+fn miniDot left: String -> top: String -> color: String -> html.Html<Task<Unit>> =
+  html.div {
+    style: html.style {
+      position: "absolute",
+      left,
+      top,
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      background: color,
+      boxShadow: `0 0 10px ${color}`
+    }
+  }
+
+fn miniMap -> html.Html<Task<Unit>> =
+  html.div {
+    style: miniMapStyle,
+    children: [
+      html.div {
+        style: html.style {
+          position: "absolute",
+          left: "10%",
+          top: "12%",
+          width: "76%",
+          height: "70%",
+          border: "2px solid #258dd1",
+          boxShadow: "inset 0 0 20px rgba(37,141,209,0.10)"
+        }
+      },
+      miniDot "20%" "25%" "#65d66b",
+      miniDot "45%" "36%" "#42b9ff",
+      miniDot "66%" "22%" "#ff5b56",
+      miniDot "72%" "61%" "#8c7bff",
+      miniDot "34%" "68%" "#ffd452"
+    ]
+  }
+
 fn leftSidebar state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
   html.div {
     children: [
@@ -394,27 +413,17 @@ fn leftSidebar state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
               menuButton state "✦" "清掃" "F2" Clean,
               menuButton state "●" "レジ管理" "F3" (Log "レジ管理パネルを確認しました"),
               menuButton state "◆" "防犯・警備" "F4" (Log "防犯モニターを確認しました"),
-              menuButton state "◆" "価格チェック" "F5" (Log "価格チェックを開始しました"),
+              menuButton state "◇" "価格チェック" "F5" (Log "価格チェックを開始しました"),
               menuButton state "◷" "シフト管理" "F6" (Log "シフト状況を確認しました")
             ]
           }
         ]
       },
       html.section {
-        style: html.style { ...panelStyle, marginTop: "8px" },
+        style: panelGapStyle,
         children: [
           html.div { style: panelHeaderStyle, children: "店舗マップ" },
-          html.div {
-            style: miniMapStyle,
-            children: [
-              html.div { style: miniMapRoomStyle },
-              miniDot "20%" "25%" "#65d66b",
-              miniDot "45%" "36%" "#42b9ff",
-              miniDot "66%" "22%" "#ff5b56",
-              miniDot "72%" "61%" "#8c7bff",
-              miniDot "34%" "68%" "#ffd452"
-            ]
-          },
+          miniMap (),
           html.div {
             style: html.style {
               display: "flex",
@@ -423,7 +432,12 @@ fn leftSidebar state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
               color: "#91a8bc",
               fontSize: "11px"
             },
-            children: ["−", "100%", "+", "全体"]
+            children: [
+              html.span { children: "−" },
+              html.span { children: "100%" },
+              html.span { children: "+" },
+              html.span { children: "全体" }
+            ]
           }
         ]
       }
@@ -567,28 +581,21 @@ fn customerSprite state: MutableSignal<GameState>
     ]
   }
 
-let clerkStyle = html.style {
-  position: "absolute",
-  left: "10%",
-  top: "31%",
-  width: "42px",
-  height: "64px",
-  textAlign: "center"
-}
-
 fn clerk -> html.Html<Task<Unit>> =
   html.div {
-    style: clerkStyle,
+    style: html.style {
+      position: "absolute",
+      left: "10%",
+      top: "31%",
+      width: "42px",
+      height: "64px",
+      textAlign: "center"
+    },
     children: [
       html.div { style: customerHeadStyle () },
       html.div { style: customerBodyStyle "#3189c4" },
       html.div {
-        style: html.style {
-          marginTop: "2px",
-          color: "#183044",
-          fontSize: "9px",
-          fontWeight: "900"
-        },
+        style: html.style { marginTop: "2px", color: "#183044", fontSize: "9px", fontWeight: "900" },
         children: "STAFF"
       }
     ]
@@ -651,13 +658,7 @@ fn storeFloor state: MutableSignal<GameState> -> current: GameState -> html.Html
           background: "linear-gradient(90deg, rgba(182,213,228,0.75), rgba(238,249,252,0.85), rgba(182,213,228,0.75))"
         },
         children: html.div {
-          style: html.style {
-            marginTop: "35px",
-            textAlign: "center",
-            color: "#314656",
-            fontSize: "10px",
-            fontWeight: "800"
-          },
+          style: html.style { marginTop: "35px", textAlign: "center", color: "#314656", fontSize: "10px", fontWeight: "800" },
           children: "入口"
         }
       },
@@ -671,94 +672,71 @@ fn storeFloor state: MutableSignal<GameState> -> current: GameState -> html.Html
   }
 
 fn storePanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  html.section {
-    style: html.style { ...panelStyle, padding: "7px" },
-    children: storeFloor state current
-  }
+  html.section { style: storePanelStyle, children: storeFloor state current }
 
-fn customerName id: Int -> String =
-  match id {
-    12 -> "大学生"
-    7 -> "会社員"
-    4 -> "会社員"
-    9 -> "専門学生"
-    15 -> "常連客"
-    _ -> "来店客"
-  }
-
-fn customerVisits id: Int -> Int =
-  match id {
-    12 -> 7
-    7 -> 3
-    4 -> 11
-    9 -> 2
-    15 -> 24
-    _ -> 1
-  }
-
-fn customerSpend id: Int -> Int =
-  match id {
-    12 -> 18540
-    7 -> 6920
-    4 -> 31740
-    9 -> 3580
-    15 -> 65420
-    _ -> 980
-  }
-
-fn customerPatience id: Int -> Int =
-  match id {
-    12 -> 78
-    7 -> 51
-    4 -> 91
-    9 -> 63
-    15 -> 84
-    _ -> 70
-  }
-
-fn customerTotal id: Int -> Int =
-  match id {
-    12 -> 748
-    7 -> 612
-    4 -> 1098
-    9 -> 498
-    15 -> 1382
-    _ -> 320
-  }
-
-fn progressStyle value: Int -> html.Style = html.style {
-  width: `${value}%`,
-  height: "100%",
-  borderRadius: "999px",
-  background: "linear-gradient(90deg, #59db63, #91dc35)",
-  boxShadow: "0 0 10px rgba(99,220,75,0.25)"
+fn customerName id: Int -> String = match id {
+  12 -> "大学生"
+  7 -> "会社員"
+  4 -> "会社員"
+  9 -> "専門学生"
+  15 -> "常連客"
+  _ -> "来店客"
 }
 
-let detailBodyStyle = html.style { padding: "11px" }
-
-let avatarStyle = html.style {
-  width: "66px",
-  height: "66px",
-  boxSizing: "border-box",
-  paddingTop: "8px",
-  border: "1px solid #36536a",
-  borderRadius: "7px",
-  background: "linear-gradient(180deg, #22313d, #152430)"
+fn customerVisits id: Int -> Int = match id {
+  12 -> 7
+  7 -> 3
+  4 -> 11
+  9 -> 2
+  15 -> 24
+  _ -> 1
 }
+
+fn customerSpend id: Int -> Int = match id {
+  12 -> 18540
+  7 -> 6920
+  4 -> 31740
+  9 -> 3580
+  15 -> 65420
+  _ -> 980
+}
+
+fn customerPatience id: Int -> Int = match id {
+  12 -> 78
+  7 -> 51
+  4 -> 91
+  9 -> 63
+  15 -> 84
+  _ -> 70
+}
+
+fn customerTotal id: Int -> Int = match id {
+  12 -> 748
+  7 -> 612
+  4 -> 1098
+  9 -> 498
+  15 -> 1382
+  _ -> 320
+}
+
+let tinyLabelStyle = html.style { color: "#8aa3b9", fontSize: "11px" }
 
 fn avatar -> html.Html<Task<Unit>> =
   html.div {
-    style: avatarStyle,
+    style: html.style {
+      width: "66px",
+      height: "66px",
+      boxSizing: "border-box",
+      paddingTop: "8px",
+      border: "1px solid #36536a",
+      borderRadius: "7px",
+      background: "linear-gradient(180deg, #22313d, #152430)"
+    },
     children: [
       html.div { style: customerHeadStyle () },
       html.div { style: customerBodyStyle "#1f2933" }
     ]
   }
-
-let tinyLabelStyle = html.style {
-  color: "#8aa3b9",
-  fontSize: "11px"
-}
 
 fn basketLine icon: String -> name: String -> price: Int -> html.Html<Task<Unit>> =
   html.div {
@@ -777,164 +755,52 @@ fn basketLine icon: String -> name: String -> price: Int -> html.Html<Task<Unit>
     ]
   }
 
-fn quickButtonStyle color: String -> html.Style = html.style {
-  padding: "9px 8px",
-  border: `1px solid ${color}`,
-  borderRadius: "6px",
-  background: "rgba(8,26,41,0.82)",
-  color,
-  cursor: "pointer",
-  fontSize: "11px",
-  fontWeight: "800"
-}
-
-fn rightSidebar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+fn progress value: Int -> html.Html<Task<Unit>> =
   html.div {
-    children: [
-      html.section {
-        style: panelStyle,
-        children: [
-          html.div { style: panelHeaderStyle, children: "選択中の顧客" },
-          html.div {
-            style: detailBodyStyle,
-            children: [
-              html.div {
-                style: html.style {
-                  display: "grid",
-                  gridTemplateColumns: "76px 1fr",
-                  gap: "10px",
-                  alignItems: "center"
-                },
-                children: [
-                  avatar (),
-                  html.div {
-                    children: [
-                      html.div {
-                        style: html.style {
-                          color: "#f3f8fc",
-                          fontSize: "19px",
-                          fontWeight: "850"
-                        },
-                        children: `顧客 #${current.selectedCustomer}`
-                      },
-                      html.div {
-                        style: html.style {
-                          display: "inline-block",
-                          marginTop: "5px",
-                          padding: "3px 8px",
-                          borderRadius: "5px",
-                          background: "#0b3960",
-                          color: "#64bbff",
-                          fontSize: "10px",
-                          fontWeight: "800"
-                        },
-                        children: customerName current.selectedCustomer
-                      },
-                      html.p {
-                        style: html.style { ...tinyLabelStyle, margin: "6px 0 0" },
-                        children: `来店数: ${customerVisits current.selectedCustomer}回`
-                      },
-                      html.p {
-                        style: html.style { ...tinyLabelStyle, margin: "2px 0 0" },
-                        children: `累計購入額: ¥${customerSpend current.selectedCustomer}`
-                      }
-                    ]
-                  }
-                ]
-              },
-              html.div {
-                style: html.style {
-                  marginTop: "12px",
-                  paddingTop: "10px",
-                  borderTop: "1px solid #183a55"
-                },
-                children: [
-                  html.div {
-                    style: html.style {
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "6px",
-                      fontSize: "11px",
-                      fontWeight: "700"
-                    },
-                    children: ["待ち時間（忍耐力）", "01:32"]
-                  },
-                  html.div {
-                    style: html.style {
-                      height: "8px",
-                      borderRadius: "999px",
-                      background: "#173149",
-                      overflow: "hidden"
-                    },
-                    children: html.div { style: progressStyle (customerPatience current.selectedCustomer) }
-                  }
-                ]
-              },
-              html.div {
-                style: html.style {
-                  marginTop: "13px",
-                  color: "#d7e7f3",
-                  fontSize: "12px",
-                  fontWeight: "800"
-                },
-                children: "カゴの中身"
-              },
-              basketLine "◒" "おにぎり 鮭" 130,
-              basketLine "▣" "からあげ弁当" 498,
-              basketLine "▮" "緑茶 600ml" 120,
-              html.div {
-                style: html.style {
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: "4px",
-                  paddingTop: "8px",
-                  borderTop: "1px solid #24445c",
-                  fontWeight: "900"
-                },
-                children: ["合計", yen (customerTotal current.selectedCustomer)]
-              },
-              html.div {
-                style: html.style {
-                  marginTop: "12px",
-                  marginBottom: "7px",
-                  fontSize: "12px",
-                  fontWeight: "800"
-                },
-                children: "クイックアクション"
-              },
-              html.div {
-                style: html.style {
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "6px"
-                },
-                children: [
-                  html.button {
-                    style: quickButtonStyle "#67d47d",
-                    onClick: dispatch state PrioritizeCheckout,
-                    children: "☆ 会計を優先"
-                  },
-                  html.button {
-                    style: quickButtonStyle (if current.recommended then "#70e2cf" else "#b284f3"),
-                    onClick: dispatch state RecommendProduct,
-                    children: if current.recommended then "✓ 提案済み" else "♡ 商品をおすすめ"
-                  },
-                  html.button {
-                    style: html.style {
-                      ...quickButtonStyle (if current.flagged then "#ffb14a" else "#e55e59"),
-                      gridColumn: "1 / -1"
-                    },
-                    onClick: dispatch state MarkSuspicious,
-                    children: if current.flagged then "⚑ 要注意として登録済み" else "⚑ 不審としてマーク"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      taskQueue current
-    ]
+    style: html.style {
+      width: `${value}%`,
+      height: "100%",
+      borderRadius: "999px",
+      background: "linear-gradient(90deg, #59db63, #91dc35)",
+      boxShadow: "0 0 10px rgba(99,220,75,0.25)"
+    }
+  }
+
+fn quickButton state: MutableSignal<GameState>
+  -> label: String
+  -> color: String
+  -> action: GameAction
+  -> html.Html<Task<Unit>> =
+  html.button {
+    style: html.style {
+      padding: "9px 8px",
+      border: `1px solid ${color}`,
+      borderRadius: "6px",
+      background: "rgba(8,26,41,0.82)",
+      color,
+      cursor: "pointer",
+      fontSize: "11px",
+      fontWeight: "800"
+    },
+    onClick: dispatch state action,
+    children: label
+  }
+
+fn flagButton state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  html.button {
+    style: html.style {
+      gridColumn: "1 / -1",
+      padding: "9px 8px",
+      border: if current.flagged then "1px solid #ffb14a" else "1px solid #e55e59",
+      borderRadius: "6px",
+      background: "rgba(8,26,41,0.82)",
+      color: if current.flagged then "#ffb14a" else "#e55e59",
+      cursor: "pointer",
+      fontSize: "11px",
+      fontWeight: "800"
+    },
+    onClick: dispatch state MarkSuspicious,
+    children: if current.flagged then "⚑ 要注意として登録済み" else "⚑ 不審としてマーク"
   }
 
 fn taskRow icon: String -> text: String -> time: String -> color: String -> html.Html<Task<Unit>> =
@@ -957,7 +823,7 @@ fn taskRow icon: String -> text: String -> time: String -> color: String -> html
 
 fn taskQueue current: GameState -> html.Html<Task<Unit>> =
   html.section {
-    style: html.style { ...panelStyle, marginTop: "8px" },
+    style: panelGapStyle,
     children: [
       html.div { style: panelHeaderStyle, children: "タスク・キュー" },
       html.div {
@@ -969,6 +835,108 @@ fn taskQueue current: GameState -> html.Html<Task<Unit>> =
           taskRow "♙" "ゴミ回収" "04:05" "#68d36d"
         ]
       }
+    ]
+  }
+
+fn rightSidebar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  html.div {
+    children: [
+      html.section {
+        style: panelStyle,
+        children: [
+          html.div { style: panelHeaderStyle, children: "選択中の顧客" },
+          html.div {
+            style: html.style { padding: "11px" },
+            children: [
+              html.div {
+                style: html.style { display: "grid", gridTemplateColumns: "76px 1fr", gap: "10px", alignItems: "center" },
+                children: [
+                  avatar (),
+                  html.div {
+                    children: [
+                      html.div {
+                        style: html.style { color: "#f3f8fc", fontSize: "19px", fontWeight: "850" },
+                        children: `顧客 #${current.selectedCustomer}`
+                      },
+                      html.div {
+                        style: html.style {
+                          display: "inline-block",
+                          marginTop: "5px",
+                          padding: "3px 8px",
+                          borderRadius: "5px",
+                          background: "#0b3960",
+                          color: "#64bbff",
+                          fontSize: "10px",
+                          fontWeight: "800"
+                        },
+                        children: customerName current.selectedCustomer
+                      },
+                      html.p {
+                        style: html.style { margin: "6px 0 0", color: "#8aa3b9", fontSize: "11px" },
+                        children: `来店数: ${customerVisits current.selectedCustomer}回`
+                      },
+                      html.p {
+                        style: html.style { margin: "2px 0 0", color: "#8aa3b9", fontSize: "11px" },
+                        children: `累計購入額: ¥${customerSpend current.selectedCustomer}`
+                      }
+                    ]
+                  }
+                ]
+              },
+              html.div {
+                style: html.style { marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #183a55" },
+                children: [
+                  html.div {
+                    style: html.style { display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", fontWeight: "700" },
+                    children: [
+                      html.span { children: "待ち時間（忍耐力）" },
+                      html.span { children: "01:32" }
+                    ]
+                  },
+                  html.div {
+                    style: html.style { height: "8px", borderRadius: "999px", background: "#173149", overflow: "hidden" },
+                    children: progress (customerPatience current.selectedCustomer)
+                  }
+                ]
+              },
+              html.div {
+                style: html.style { marginTop: "13px", color: "#d7e7f3", fontSize: "12px", fontWeight: "800" },
+                children: "カゴの中身"
+              },
+              basketLine "◒" "おにぎり 鮭" 130,
+              basketLine "▣" "からあげ弁当" 498,
+              basketLine "▮" "緑茶 600ml" 120,
+              html.div {
+                style: html.style {
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: "4px",
+                  paddingTop: "8px",
+                  borderTop: "1px solid #24445c",
+                  fontWeight: "900"
+                },
+                children: [
+                  html.span { children: "合計" },
+                  html.span { children: yen (customerTotal current.selectedCustomer) }
+                ]
+              },
+              html.div {
+                style: html.style { marginTop: "12px", marginBottom: "7px", fontSize: "12px", fontWeight: "800" },
+                children: "クイックアクション"
+              },
+              html.div {
+                style: html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" },
+                children: [
+                  quickButton state "☆ 会計を優先" "#67d47d" PrioritizeCheckout,
+                  quickButton state (if current.recommended then "✓ 提案済み" else "♡ 商品をおすすめ") (if current.recommended then "#70e2cf" else "#b284f3") RecommendProduct,
+                  flagButton state current
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      taskQueue current
     ]
   }
 
@@ -1033,13 +1001,7 @@ fn controlButton state: MutableSignal<GameState>
         },
         children: icon
       },
-      html.div {
-        style: html.style {
-          fontSize: "11px",
-          fontWeight: "800"
-        },
-        children: label
-      }
+      html.div { style: html.style { fontSize: "11px", fontWeight: "800" }, children: label }
     ]
   }
 
@@ -1049,12 +1011,7 @@ fn quickControls state: MutableSignal<GameState> -> current: GameState -> html.H
     children: [
       html.div { style: panelHeaderStyle, children: "クイックコントロール" },
       html.div {
-        style: html.style {
-          display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
-          gap: "7px",
-          padding: "10px"
-        },
+        style: html.style { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "7px", padding: "10px" },
         children: [
           controlButton state "▶" "1分進める" (Advance 1) False,
           controlButton state "◴" "5分進める" (Advance 5) False,
@@ -1066,26 +1023,28 @@ fn quickControls state: MutableSignal<GameState> -> current: GameState -> html.H
     ]
   }
 
+fn summaryRow label: String -> value: String -> html.Html<Task<Unit>> =
+  html.div {
+    style: html.style { display: "flex", justifyContent: "space-between", gap: "12px" },
+    children: [
+      html.span { children: label },
+      html.span { style: html.style { color: "#d9e7f2" }, children: value }
+    ]
+  }
+
 fn dailySummary current: GameState -> html.Html<Task<Unit>> =
   html.section {
     style: panelStyle,
     children: [
       html.div { style: panelHeaderStyle, children: "本日のまとめ（4/15）" },
       html.div {
-        style: html.style {
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: "8px 12px",
-          padding: "11px 13px",
-          color: "#9fb4c5",
-          fontSize: "11px"
-        },
+        style: html.style { display: "grid", gap: "8px", padding: "11px 13px", color: "#9fb4c5", fontSize: "11px" },
         children: [
-          "来客数", "432人",
-          "平均客単価", "¥827",
-          "廃棄ロス", "¥4,210",
-          "電気代（予測）", "¥8,760",
-          "現在満足度", percent current.satisfaction
+          summaryRow "来客数" "432人",
+          summaryRow "平均客単価" "¥827",
+          summaryRow "廃棄ロス" "¥4,210",
+          summaryRow "電気代（予測）" "¥8,760",
+          summaryRow "現在満足度" (percent current.satisfaction)
         ]
       }
     ]
@@ -1095,7 +1054,7 @@ fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<
   html.main {
     style: appStyle,
     children: [
-      topBar current,
+      topBar state current,
       html.div {
         style: bodyGridStyle,
         children: [
