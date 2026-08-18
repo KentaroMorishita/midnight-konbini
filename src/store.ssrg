@@ -1,0 +1,186 @@
+import * as html from "std/web/html"
+
+let atlasImage = "url(https://raw.githubusercontent.com/KentaroMorishita/midnight-konbini/main/assets/game/store-atlas.png)"
+
+fn empty style: html.Style -> html.Html<Task<Unit>> =
+  html.div { style, children: "" }
+
+fn sprite left: String
+  -> top: String
+  -> width: String
+  -> height: String
+  -> offsetX: Int
+  -> offsetY: Int
+  -> html.Html<Task<Unit>> =
+  empty (html.style {
+    position: "absolute",
+    left,
+    top,
+    width,
+    height,
+    backgroundImage: atlasImage,
+    backgroundSize: "608px 408px",
+    backgroundPosition: `-${offsetX}px -${offsetY}px`,
+    backgroundRepeat: "no-repeat",
+    imageRendering: "pixelated",
+    filter: "drop-shadow(0 7px 5px rgba(55,38,24,0.22))"
+  })
+
+fn wallLabel left: String
+  -> top: String
+  -> value: String
+  -> html.Html<Task<Unit>> =
+  html.div {
+    style: html.style {
+      position: "absolute",
+      left,
+      top,
+      padding: "4px 8px",
+      border: "2px solid #173c58",
+      background: "#0b3458",
+      color: "#f4f0de",
+      fontSize: "10px",
+      fontWeight: "900",
+      letterSpacing: "0.04em",
+      boxShadow: "2px 2px 0 #09253d"
+    },
+    children: value
+  }
+
+fn customerArt offsetX: Int -> width: String -> html.Html<Task<Unit>> =
+  empty (html.style {
+    position: "absolute",
+    left: "7px",
+    top: "5px",
+    width,
+    height: "54px",
+    backgroundImage: atlasImage,
+    backgroundSize: "608px 408px",
+    backgroundPosition: `-${offsetX}px -345px`,
+    backgroundRepeat: "no-repeat",
+    imageRendering: "pixelated",
+    filter: "drop-shadow(0 5px 3px rgba(50,35,24,0.28))"
+  })
+
+fn customer selected: Int
+  -> id: Int
+  -> left: String
+  -> top: String
+  -> offsetX: Int
+  -> width: String
+  -> action: Task<Unit>
+  -> html.Html<Task<Unit>> =
+  html.button {
+    buttonType: "button",
+    style: html.style {
+      position: "absolute",
+      left,
+      top,
+      width: "47px",
+      height: "67px",
+      padding: "0",
+      border: if selected == id then "2px solid #38bdf8" else "2px solid transparent",
+      borderRadius: "9px",
+      background: if selected == id then "rgba(56,189,248,0.15)" else "transparent",
+      boxShadow: if selected == id then "0 0 0 2px rgba(255,255,255,0.7), 0 0 18px #38bdf8" else "none",
+      cursor: "pointer"
+    },
+    onClick: action,
+    children: customerArt offsetX width
+  }
+
+fn clerk -> html.Html<Task<Unit>> =
+  html.div {
+    style: html.style {
+      position: "absolute",
+      left: "122px",
+      top: "250px",
+      width: "47px",
+      height: "67px"
+    },
+    children: customerArt 97 "30px"
+  }
+
+fn floorGlow -> html.Html<Task<Unit>> =
+  empty (html.style {
+    position: "absolute",
+    left: "0",
+    top: "0",
+    right: "0",
+    bottom: "0",
+    pointerEvents: "none",
+    background: "radial-gradient(circle at 48% 44%, rgba(255,244,207,0.20), transparent 46%), linear-gradient(180deg, rgba(255,248,222,0.10), rgba(91,64,37,0.05))"
+  })
+
+fn foregroundRail -> html.Html<Task<Unit>> =
+  empty (html.style {
+    position: "absolute",
+    left: "14px",
+    right: "14px",
+    bottom: "8px",
+    height: "18px",
+    borderTop: "4px solid #4f4a41",
+    borderBottom: "6px solid #302e2a",
+    background: "#6a6255",
+    boxShadow: "0 -4px 0 rgba(255,255,255,0.18)"
+  })
+
+pub fn view selected: Int
+  -> nightMode: Bool
+  -> select12: Task<Unit>
+  -> select7: Task<Unit>
+  -> select4: Task<Unit>
+  -> select9: Task<Unit>
+  -> select15: Task<Unit>
+  -> html.Html<Task<Unit>> =
+  html.div {
+    style: html.style {
+      position: "relative",
+      width: "760px",
+      height: "560px",
+      marginLeft: "auto",
+      marginRight: "auto",
+      overflow: "hidden",
+      border: "4px solid #302f2b",
+      borderRadius: "5px",
+      backgroundColor: if nightMode then "#d8c9ad" else "#eadcc3",
+      backgroundImage: "linear-gradient(rgba(103,81,54,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(103,81,54,0.16) 1px, transparent 1px)",
+      backgroundSize: "24px 24px",
+      boxShadow: "inset 0 0 0 9px #817765, inset 0 0 45px rgba(65,45,29,0.18), 0 12px 28px rgba(0,0,0,0.32)"
+    },
+    children: [
+      floorGlow (),
+
+      sprite "22px" "23px" "46px" "103px" 540 6,
+      sprite "88px" "22px" "192px" "105px" 6 116,
+      sprite "302px" "22px" "149px" "105px" 205 116,
+      sprite "594px" "22px" "109px" "103px" 425 6,
+
+      sprite "27px" "190px" "199px" "103px" 156 6,
+      sprite "250px" "199px" "108px" "111px" 6 227,
+      sprite "385px" "177px" "110px" "105px" 360 116,
+      sprite "506px" "177px" "110px" "105px" 360 116,
+      sprite "631px" "182px" "137px" "111px" 121 227,
+
+      sprite "82px" "374px" "136px" "105px" 477 116,
+      sprite "345px" "373px" "165px" "111px" 264 227,
+      sprite "526px" "439px" "143px" "103px" 6 6,
+
+      wallLabel "90px" "7px" "ドリンク・冷蔵",
+      wallLabel "307px" "7px" "お弁当・惣菜",
+      wallLabel "35px" "173px" "レジカウンター",
+      wallLabel "391px" "160px" "スナック・菓子",
+      wallLabel "636px" "165px" "日用品・雑貨",
+      wallLabel "88px" "356px" "雑誌・書籍",
+      wallLabel "351px" "355px" "アイス・冷凍食品",
+
+      clerk (),
+      customer selected 12 "308px" "132px" 6 "31px" select12,
+      customer selected 7 "559px" "130px" 142 "31px" select7,
+      customer selected 4 "606px" "304px" 52 "30px" select4,
+      customer selected 9 "307px" "306px" 6 "31px" select9,
+      customer selected 15 "194px" "309px" 52 "30px" select15,
+
+      foregroundRail ()
+    ]
+  }
