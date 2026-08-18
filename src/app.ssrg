@@ -1,0 +1,563 @@
+import * as dom from "std/web/dom"
+import * as html from "std/web/html"
+import * as signals from "std/signal"
+import { MutableSignal, Signal } from "std/signal"
+import { view as storeView } from "./store"
+
+struct GameState {
+  hour: Int,
+  minute: Int,
+  sales: Int,
+  satisfaction: Int,
+  stockAlerts: Int,
+  cleanliness: Int,
+  energy: Int,
+  selectedCustomer: Int,
+  queue: Int,
+  paused: Bool,
+  nightMode: Bool,
+  flagged: Bool,
+  recommended: Bool,
+  lastEvent: String
+}
+
+type GameAction =
+  | Advance Int
+  | TogglePause
+  | ToggleNightMode
+  | SelectCustomer Int
+  | Restock
+  | Clean
+  | PrioritizeCheckout
+  | RecommendProduct
+  | MarkSuspicious
+  | Log String
+
+let initialState: GameState = GameState {
+  hour: 23,
+  minute: 47,
+  sales: 398670,
+  satisfaction: 86,
+  stockAlerts: 7,
+  cleanliness: 78,
+  energy: 62,
+  selectedCustomer: 12,
+  queue: 2,
+  paused: False,
+  nightMode: True,
+  flagged: False,
+  recommended: False,
+  lastEvent: "配送が到着しました（冷凍食品）"
+}
+
+fn toggle value: Bool -> Bool = if value then False else True
+fn cap100 value: Int -> Int = if value > 100 then 100 else value
+fn floor0 value: Int -> Int = if value < 0 then 0 else value
+fn nextHour value: Int -> Int = if value >= 23 then 0 else value + 1
+
+fn advanceTime amount: Int -> state: GameState -> GameState =
+  if state.minute + amount >= 60 then
+    GameState {
+      ...state,
+      hour: nextHour state.hour,
+      minute: state.minute + amount - 60,
+      sales: state.sales + amount * 31,
+      cleanliness: floor0 (state.cleanliness - 1),
+      energy: floor0 (state.energy - 1),
+      lastEvent: "時間を進めました。店内状況が更新されています"
+    }
+  else
+    GameState {
+      ...state,
+      minute: state.minute + amount,
+      sales: state.sales + amount * 31,
+      lastEvent: "時間を進めました。店内状況が更新されています"
+    }
+
+fn update action: GameAction -> state: GameState -> GameState =
+  match action {
+    Advance amount -> advanceTime amount state
+    TogglePause -> GameState {
+      ...state,
+      paused: toggle state.paused,
+      lastEvent: if state.paused then "営業シミュレーションを再開しました" else "営業シミュレーションを一時停止しました"
+    }
+    ToggleNightMode -> GameState {
+      ...state,
+      nightMode: toggle state.nightMode,
+      lastEvent: if state.nightMode then "通常表示へ切り替えました" else "深夜モードへ切り替えました"
+    }
+    SelectCustomer id -> GameState {
+      ...state,
+      selectedCustomer: id,
+      flagged: False,
+      recommended: False,
+      lastEvent: `顧客 #${id} を選択しました`
+    }
+    Restock -> GameState {
+      ...state,
+      stockAlerts: 0,
+      energy: floor0 (state.energy - 3),
+      lastEvent: "不足商品の補充を完了しました"
+    }
+    Clean -> GameState {
+      ...state,
+      cleanliness: cap100 (state.cleanliness + 15),
+      energy: floor0 (state.energy - 2),
+      satisfaction: cap100 (state.satisfaction + 1),
+      lastEvent: "店内清掃を実行しました"
+    }
+    PrioritizeCheckout -> GameState {
+      ...state,
+      queue: floor0 (state.queue - 1),
+      sales: state.sales + 748,
+      satisfaction: cap100 (state.satisfaction + 2),
+      lastEvent: "選択中の顧客を優先会計しました"
+    }
+    RecommendProduct -> GameState {
+      ...state,
+      recommended: True,
+      sales: state.sales + 160,
+      satisfaction: cap100 (state.satisfaction + 1),
+      lastEvent: "おすすめ商品を提案しました"
+    }
+    MarkSuspicious -> GameState {
+      ...state,
+      flagged: True,
+      lastEvent: "選択中の顧客を要注意としてマークしました"
+    }
+    Log message -> GameState { ...state, lastEvent: message }
+  }
+
+fn dispatch state: MutableSignal<GameState> -> action: GameAction -> Task<Unit> =
+  signals.update (update action) state
+
+fn timeText current: GameState -> String = `${current.hour}:${current.minute}`
+fn yen amount: Int -> String = `¥${amount}`
+fn percent amount: Int -> String = `${amount}%`
+
+fn node style: html.Style
+  -> children: Array<html.Html<Task<Unit>>>
+  -> html.Html<Task<Unit>> =
+  html.div { style, children }
+
+fn text style: html.Style -> value: String -> html.Html<Task<Unit>> =
+  html.div { style, children: value }
+
+fn empty style: html.Style -> html.Html<Task<Unit>> = text style ""
+
+fn actionButton state: MutableSignal<GameState>
+  -> style: html.Style
+  -> label: String
+  -> action: GameAction
+  -> html.Html<Task<Unit>> =
+  html.button {
+    buttonType: "button",
+    style,
+    onClick: dispatch state action,
+    children: label
+  }
+
+let appStyle = html.style {
+  minHeight: "100vh",
+  minWidth: "1380px",
+  boxSizing: "border-box",
+  background: "#06111d",
+  color: "#d9e8f7",
+  padding: "10px",
+  fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+}
+
+let topGridStyle = html.style {
+  display: "grid",
+  gridTemplateColumns: "250px repeat(6, minmax(0, 1fr)) 150px",
+  gap: "8px",
+  marginBottom: "8px"
+}
+
+let bodyGridStyle = html.style {
+  display: "grid",
+  gridTemplateColumns: "250px minmax(780px, 1fr) 320px",
+  gap: "8px",
+  minHeight: "575px"
+}
+
+let bottomGridStyle = html.style {
+  display: "grid",
+  gridTemplateColumns: "440px minmax(0, 1fr) 285px",
+  gap: "8px",
+  marginTop: "8px"
+}
+
+let panelStyle = html.style {
+  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+  border: "1px solid #173b5a",
+  borderRadius: "8px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+  overflow: "hidden"
+}
+
+let panelGapStyle = html.style {
+  marginTop: "8px",
+  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+  border: "1px solid #173b5a",
+  borderRadius: "8px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+  overflow: "hidden"
+}
+
+let panelHeaderStyle = html.style {
+  padding: "8px 12px",
+  borderBottom: "1px solid #173b5a",
+  color: "#cfe7fb",
+  fontSize: "13px",
+  fontWeight: "800",
+  letterSpacing: "0.02em"
+}
+
+let titleCardStyle = html.style {
+  padding: "14px 16px",
+  background: "radial-gradient(circle at 18% 18%, rgba(46,164,255,0.20), transparent 32%), linear-gradient(180deg, #081827, #06111d)",
+  border: "1px solid #173b5a",
+  borderRadius: "8px",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
+}
+
+fn titleCard -> html.Html<Task<Unit>> =
+  node titleCardStyle [
+    text (html.style { color: "#47b8ff", fontSize: "27px", lineHeight: "1.05", fontWeight: "900", textShadow: "0 0 18px rgba(71,184,255,0.38)" }) "☾ 深夜コンビニ",
+    text (html.style { marginTop: "6px", marginLeft: "36px", color: "#b49aff", fontSize: "12px", letterSpacing: "0.18em", fontWeight: "700" }) "MIDNIGHT KONBINI"
+  ]
+
+fn metric label: String -> value: String -> foot: String -> html.Html<Task<Unit>> =
+  node (html.style {
+    padding: "11px 13px",
+    background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+    border: "1px solid #173b5a",
+    borderRadius: "8px",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
+  }) [
+    text (html.style { color: "#91a8bc", fontSize: "11px", fontWeight: "700" }) label,
+    text (html.style { marginTop: "7px", color: "#f4f9ff", fontSize: "24px", lineHeight: "1", fontWeight: "850" }) value,
+    text (html.style { marginTop: "7px", color: "#6fd36c", fontSize: "10px", fontWeight: "700" }) foot
+  ]
+
+fn topActions state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
+  node (html.style { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", alignContent: "center", padding: "10px" }) [
+    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "▥" (Log "売上レポートを確認しました"),
+    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "✉" (Log "メッセージを確認しました"),
+    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "⚙" (Log "設定を確認しました"),
+    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "☰" (Log "メニューを開きました")
+  ]
+
+fn topBar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node topGridStyle [
+    titleCard (),
+    metric "時間" (timeText current) (if current.paused then "PAUSED" else "4月15日 / 夜勤中"),
+    metric "売上（本日）" (yen current.sales) "前日比  +12.4%",
+    metric "満足度" (percent current.satisfaction) "+3%",
+    metric "在庫アラート" `${current.stockAlerts}` (if current.stockAlerts == 0 then "補充済み" else "要対応"),
+    metric "清潔度" (percent current.cleanliness) (if current.cleanliness >= 85 then "良好" else "やや汚れている"),
+    metric "エネルギー" (percent current.energy) "残り 4.2時間",
+    topActions state
+  ]
+
+fn menuButton state: MutableSignal<GameState> -> label: String -> action: GameAction -> html.Html<Task<Unit>> =
+  actionButton state (html.style {
+    width: "100%",
+    boxSizing: "border-box",
+    marginBottom: "7px",
+    padding: "10px 11px",
+    border: "1px solid #1d4663",
+    borderRadius: "6px",
+    background: "linear-gradient(180deg, #0c2337, #091b2a)",
+    color: "#d9e8f7",
+    cursor: "pointer",
+    fontWeight: "700",
+    textAlign: "left"
+  }) label action
+
+fn menuPanel state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
+  node panelStyle [
+    text panelHeaderStyle "管理メニュー",
+    node (html.style { padding: "9px" }) [
+      menuButton state "▣  発注・補充                         F1" Restock,
+      menuButton state "✦  清掃                               F2" Clean,
+      menuButton state "●  レジ管理                           F3" (Log "レジ管理パネルを確認しました"),
+      menuButton state "◆  防犯・警備                         F4" (Log "防犯モニターを確認しました"),
+      menuButton state "◇  価格チェック                       F5" (Log "価格チェックを開始しました"),
+      menuButton state "◷  シフト管理                         F6" (Log "シフト状況を確認しました")
+    ]
+  ]
+
+fn miniDot left: String -> top: String -> color: String -> html.Html<Task<Unit>> =
+  empty (html.style { position: "absolute", left, top, width: "8px", height: "8px", borderRadius: "50%", background: color, boxShadow: `0 0 10px ${color}` })
+
+fn mapPanel -> html.Html<Task<Unit>> =
+  node panelGapStyle [
+    text panelHeaderStyle "店舗マップ",
+    node (html.style {
+      position: "relative",
+      height: "160px",
+      margin: "10px",
+      border: "1px solid #246e9e",
+      borderRadius: "5px",
+      backgroundColor: "#061b2c",
+      backgroundImage: "linear-gradient(rgba(61,139,194,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(61,139,194,0.10) 1px, transparent 1px)",
+      backgroundSize: "20px 20px"
+    }) [
+      empty (html.style { position: "absolute", left: "10%", top: "12%", width: "76%", height: "70%", border: "2px solid #258dd1" }),
+      miniDot "20%" "25%" "#65d66b",
+      miniDot "45%" "36%" "#42b9ff",
+      miniDot "66%" "22%" "#ff5b56",
+      miniDot "72%" "61%" "#8c7bff",
+      miniDot "34%" "68%" "#ffd452"
+    ],
+    node (html.style { display: "flex", justifyContent: "space-between", padding: "0 10px 10px", color: "#91a8bc", fontSize: "11px" }) [
+      text (html.style {}) "−",
+      text (html.style {}) "100%",
+      text (html.style {}) "+",
+      text (html.style {}) "全体"
+    ]
+  ]
+
+fn leftSidebar state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
+  node (html.style {}) [menuPanel state, mapPanel ()]
+
+fn storePanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node (html.style {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "7px",
+    background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
+    border: "1px solid #173b5a",
+    borderRadius: "8px",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+    overflow: "hidden"
+  }) [
+    storeView
+      current.selectedCustomer
+      current.nightMode
+      (dispatch state (SelectCustomer 12))
+      (dispatch state (SelectCustomer 7))
+      (dispatch state (SelectCustomer 4))
+      (dispatch state (SelectCustomer 9))
+      (dispatch state (SelectCustomer 15))
+  ]
+
+fn customerName id: Int -> String = match id {
+  12 -> "大学生"
+  7 -> "会社員"
+  4 -> "会社員"
+  9 -> "専門学生"
+  15 -> "常連客"
+  _ -> "来店客"
+}
+
+fn customerVisits id: Int -> Int = match id {
+  12 -> 7
+  7 -> 3
+  4 -> 11
+  9 -> 2
+  15 -> 24
+  _ -> 1
+}
+
+fn customerSpend id: Int -> Int = match id {
+  12 -> 18540
+  7 -> 6920
+  4 -> 31740
+  9 -> 3580
+  15 -> 65420
+  _ -> 980
+}
+
+fn customerPatience id: Int -> Int = match id {
+  12 -> 78
+  7 -> 51
+  4 -> 91
+  9 -> 63
+  15 -> 84
+  _ -> 70
+}
+
+fn customerTotal id: Int -> Int = match id {
+  12 -> 748
+  7 -> 612
+  4 -> 1098
+  9 -> 498
+  15 -> 1382
+  _ -> 320
+}
+
+fn avatar -> html.Html<Task<Unit>> =
+  node (html.style {
+    width: "66px",
+    height: "66px",
+    boxSizing: "border-box",
+    paddingTop: "8px",
+    border: "1px solid #36536a",
+    borderRadius: "7px",
+    background: "linear-gradient(180deg, #22313d, #152430)"
+  }) [
+    empty (html.style { width: "20px", height: "20px", margin: "0 auto", borderRadius: "50%", background: "#e5b58f", border: "2px solid #2d2929" }),
+    empty (html.style { width: "27px", height: "31px", margin: "-1px auto 0", borderRadius: "8px 8px 5px 5px", background: "#1f2933", border: "2px solid #292f35" })
+  ]
+
+fn progress value: Int -> html.Html<Task<Unit>> =
+  empty (html.style { width: `${value}%`, height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #59db63, #91dc35)" })
+
+fn basketLine icon: String -> name: String -> price: Int -> html.Html<Task<Unit>> =
+  node (html.style { display: "grid", gridTemplateColumns: "22px 1fr auto", gap: "6px", padding: "5px 0", color: "#d3e2ef", fontSize: "12px" }) [
+    text (html.style {}) icon,
+    text (html.style {}) name,
+    text (html.style {}) (yen price)
+  ]
+
+fn customerPanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node panelStyle [
+    text panelHeaderStyle "選択中の顧客",
+    node (html.style { padding: "11px" }) [
+      node (html.style { display: "grid", gridTemplateColumns: "76px 1fr", gap: "10px", alignItems: "center" }) [
+        avatar (),
+        node (html.style {}) [
+          text (html.style { color: "#f3f8fc", fontSize: "19px", fontWeight: "850" }) `顧客 #${current.selectedCustomer}`,
+          text (html.style { marginTop: "5px", color: "#64bbff", fontSize: "11px", fontWeight: "800" }) (customerName current.selectedCustomer),
+          text (html.style { marginTop: "6px", color: "#8aa3b9", fontSize: "11px" }) `来店数: ${customerVisits current.selectedCustomer}回`,
+          text (html.style { marginTop: "2px", color: "#8aa3b9", fontSize: "11px" }) `累計購入額: ¥${customerSpend current.selectedCustomer}`
+        ]
+      ],
+      node (html.style { marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #183a55" }) [
+        node (html.style { display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", fontWeight: "700" }) [
+          text (html.style {}) "待ち時間（忍耐力）",
+          text (html.style {}) "01:32"
+        ],
+        node (html.style { height: "8px", borderRadius: "999px", background: "#173149", overflow: "hidden" }) [progress (customerPatience current.selectedCustomer)]
+      ],
+      node (html.style { marginTop: "13px" }) [
+        text (html.style { color: "#d7e7f3", fontSize: "12px", fontWeight: "800" }) "カゴの中身",
+        basketLine "◒" "おにぎり 鮭" 130,
+        basketLine "▣" "からあげ弁当" 498,
+        basketLine "▮" "緑茶 600ml" 120,
+        node (html.style { display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid #24445c", fontWeight: "900" }) [
+          text (html.style {}) "合計",
+          text (html.style {}) (yen (customerTotal current.selectedCustomer))
+        ]
+      ],
+      node (html.style { marginTop: "12px" }) [
+        text (html.style { marginBottom: "7px", fontSize: "12px", fontWeight: "800" }) "クイックアクション",
+        node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }) [
+          actionButton state (html.style { padding: "9px 8px", border: "1px solid #67d47d", borderRadius: "6px", background: "#081a29", color: "#67d47d", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) "☆ 会計を優先" PrioritizeCheckout,
+          actionButton state (html.style { padding: "9px 8px", border: "1px solid #b284f3", borderRadius: "6px", background: "#081a29", color: "#b284f3", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) (if current.recommended then "✓ 提案済み" else "♡ 商品をおすすめ") RecommendProduct,
+          actionButton state (html.style { gridColumn: "1 / -1", padding: "9px 8px", border: "1px solid #e55e59", borderRadius: "6px", background: "#081a29", color: if current.flagged then "#ffb14a" else "#e55e59", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) (if current.flagged then "⚑ 要注意として登録済み" else "⚑ 不審としてマーク") MarkSuspicious
+        ]
+      ]
+    ]
+  ]
+
+fn taskRow icon: String -> label: String -> time: String -> color: String -> html.Html<Task<Unit>> =
+  node (html.style { display: "grid", gridTemplateColumns: "20px 1fr auto", gap: "7px", padding: "6px 0", color: "#d5e4ef", fontSize: "11px" }) [
+    text (html.style { color: color }) icon,
+    text (html.style {}) label,
+    text (html.style { color: "#8aa3b9" }) time
+  ]
+
+fn taskQueue current: GameState -> html.Html<Task<Unit>> =
+  node panelGapStyle [
+    text panelHeaderStyle "タスク・キュー",
+    node (html.style { padding: "8px 12px 10px" }) [
+      taskRow "●" `レジに並ぶ（${current.queue}人）` "01:32" "#a98cff",
+      taskRow "▦" "品出し：カップ麺 売り場" "02:15" "#ffb347",
+      taskRow "♧" "清掃：トイレ" "03:40" "#49c8ff",
+      taskRow "♙" "ゴミ回収" "04:05" "#68d36d"
+    ]
+  ]
+
+fn rightSidebar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node (html.style {}) [customerPanel state current, taskQueue current]
+
+fn eventLine time: String -> icon: String -> label: String -> color: String -> html.Html<Task<Unit>> =
+  node (html.style { display: "grid", gridTemplateColumns: "42px 18px 1fr", gap: "5px", padding: "3px 0", color: color, fontSize: "10px" }) [
+    text (html.style { color: "#8097ab" }) time,
+    text (html.style {}) icon,
+    text (html.style {}) label
+  ]
+
+fn eventLog current: GameState -> html.Html<Task<Unit>> =
+  node panelStyle [
+    text panelHeaderStyle "イベントログ",
+    node (html.style { padding: "8px 12px" }) [
+      eventLine "NOW" "•" current.lastEvent "#dbe9f4",
+      eventLine "23:38" "▲" "カップ麺コーナーの在庫が少なくなっています" "#f0b74b",
+      eventLine "23:31" "◆" "不審な人物を警備員が注意しました" "#d9e4ec",
+      eventLine "23:20" "▥" "深夜の混雑時間帯に入ります（+15% 来客）" "#8fcaff",
+      eventLine "23:12" "♨" "冷凍庫の温度が上昇しています（+1.2℃）" "#f06860"
+    ]
+  ]
+
+fn controlStyle active: Bool -> html.Style = html.style {
+  minHeight: "96px",
+  border: if active then "1px solid #5abcf7" else "1px solid #214761",
+  borderRadius: "8px",
+  background: if active then "linear-gradient(180deg, #0d3955, #0a2336)" else "linear-gradient(180deg, #0b2235, #081a2a)",
+  color: "#dbeaf7",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: "800"
+}
+
+fn quickControls state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node panelStyle [
+    text panelHeaderStyle "クイックコントロール",
+    node (html.style { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "7px", padding: "10px" }) [
+      actionButton state (controlStyle False) "▶  1分進める" (Advance 1),
+      actionButton state (controlStyle False) "◴  5分進める" (Advance 5),
+      actionButton state (controlStyle current.paused) (if current.paused then "▶  再開" else "Ⅱ  一時停止") TogglePause,
+      actionButton state (controlStyle False) "☾+  1時間進める" (Advance 60),
+      actionButton state (controlStyle current.nightMode) "◉  深夜モード" ToggleNightMode
+    ]
+  ]
+
+fn summaryRow label: String -> value: String -> html.Html<Task<Unit>> =
+  node (html.style { display: "flex", justifyContent: "space-between", gap: "12px" }) [
+    text (html.style {}) label,
+    text (html.style { color: "#d9e7f2" }) value
+  ]
+
+fn dailySummary current: GameState -> html.Html<Task<Unit>> =
+  node panelStyle [
+    text panelHeaderStyle "本日のまとめ（4/15）",
+    node (html.style { display: "grid", gap: "8px", padding: "11px 13px", color: "#9fb4c5", fontSize: "11px" }) [
+      summaryRow "来客数" "432人",
+      summaryRow "平均客単価" "¥827",
+      summaryRow "廃棄ロス" "¥4,210",
+      summaryRow "電気代（予測）" "¥8,760",
+      summaryRow "現在満足度" (percent current.satisfaction)
+    ]
+  ]
+
+fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node appStyle [
+    topBar state current,
+    node bodyGridStyle [leftSidebar state, storePanel state current, rightSidebar state current],
+    node bottomGridStyle [eventLog current, quickControls state current, dailySummary current]
+  ]
+
+fn perform action: Task<Unit> -> Task<Unit> = action
+
+effect fn mount content: Signal<html.Html<Task<Unit>>>
+  -> Unit
+with dom: dom.Dom
+fails String =
+  do {
+    target <- dom.query "#app" |> mapError (\error: dom.DomError -> "DOM target unavailable")
+    dom.run (dom.defaultOptions ()) target perform content
+      |> mapError (\error: dom.DomRuntimeError<Never> -> "DOM runtime failed")
+  }
+
+pub effect fn main = do {
+  state <- signals.make initialState
+  let content = signals.map (page state) state
+  mount content
+}
