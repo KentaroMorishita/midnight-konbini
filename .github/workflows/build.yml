@@ -1,0 +1,17 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  seseragi-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install Seseragi CLI
+        run: cargo install --git https://github.com/KentaroMorishita/seseragi --locked seseragi-cli
+      - name: Build web app
+        run: seseragi build .
