@@ -4,14 +4,43 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   seseragi-web:
     runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM: kentaromorishitas-projects
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
+
       - name: Install Seseragi CLI
         run: cargo install --git https://github.com/KentaroMorishita/seseragi --locked seseragi-cli
+
       - name: Build web app
         run: seseragi build .
+
+      - name: Deploy to Vercel
+        if: github.event_name != 'pull_request' && env.VERCEL_TOKEN != ''
+        run: |
+          bunx vercel@latest project inspect midnight-konbini \
+            --scope "$VERCEL_TEAM" \
+            --token "$VERCEL_TOKEN" >/dev/null 2>&1 \
+            || bunx vercel@latest project add midnight-konbini \
+              --scope "$VERCEL_TEAM" \
+              --token "$VERCEL_TOKEN"
+
+          bunx vercel@latest deploy dist \
+            --prod \
+            --yes \
+            --project midnight-konbini \
+            --scope "$VERCEL_TEAM" \
+            --token "$VERCEL_TOKEN"
+
+      - name: Vercel deployment is not configured
+        if: github.event_name != 'pull_request' && env.VERCEL_TOKEN == ''
+        run: echo "Set the VERCEL_TOKEN repository secret to enable production deployment."
