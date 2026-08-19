@@ -39,14 +39,12 @@ jobs:
           cd .branch-cleanup
           git fetch origin "+refs/heads/*:refs/remotes/origin/*"
 
-          git for-each-ref \
-            --format='%(refname:short)' \
-            --merged=refs/remotes/origin/main \
-            'refs/remotes/origin/*' \
+          git branch -r --merged origin/main \
+          | sed 's/^[ *]*//' \
           | while read -r ref; do
               branch="${ref#origin/}"
               case "$branch" in
-                main|HEAD) ;;
+                main|HEAD|"") ;;
                 feat/*|fix/*|ci/*|chore/*)
                   git push origin --delete "$branch" || true
                   ;;
