@@ -1,20 +1,152 @@
 {
-  "tileSize": 16,
-  "renderScale": 3,
-  "productionTileSize": 48,
+  "version": "2.0-candidate",
+  "notes": "No artistic post-processing is applied in this bundle. Candidate fixtures are preserved at their extracted PNG sizes for visual review before final grid normalization.",
   "fixtures": {
+    "atm": {
+      "width": 69,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/atm.png",
+      "status": "candidate"
+    },
+    "auto_door": {
+      "width": 98,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/auto_door.png",
+      "status": "candidate"
+    },
+    "banner_set": {
+      "width": 136,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/banner_set.png",
+      "status": "candidate"
+    },
+    "ceiling_light": {
+      "width": 74,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/ceiling_light.png",
+      "status": "candidate"
+    },
+    "clock": {
+      "width": 60,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/clock.png",
+      "status": "candidate"
+    },
+    "coffee_machine": {
+      "width": 115,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/coffee_machine.png",
+      "status": "candidate"
+    },
+    "freezer_case": {
+      "width": 140,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/freezer_case.png",
+      "status": "candidate"
+    },
+    "plant": {
+      "width": 62,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/plant.png",
+      "status": "candidate"
+    },
+    "poster_set": {
+      "width": 184,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/poster_set.png",
+      "status": "candidate"
+    },
+    "register_counter": {
+      "width": 160,
+      "height": 75,
+      "transparent": true,
+      "path": "/sprites/fixtures/register_counter.png",
+      "status": "candidate"
+    },
+    "register_terminal": {
+      "width": 96,
+      "height": 76,
+      "transparent": true,
+      "path": "/sprites/fixtures/register_terminal.png",
+      "status": "candidate"
+    },
+    "security_camera": {
+      "width": 58,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/security_camera.png",
+      "status": "candidate"
+    },
+    "shelf_bento": {
+      "width": 180,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/shelf_bento.png",
+      "status": "candidate"
+    },
+    "shelf_drink": {
+      "width": 162,
+      "height": 78,
+      "transparent": true,
+      "path": "/sprites/fixtures/shelf_drink.png",
+      "status": "candidate"
+    },
     "shelf_snack": {
-      "tilesW": 3,
-      "tilesH": 1,
       "width": 144,
       "height": 48,
-      "path": "/sprites/fixtures/shelf_snack.png"
+      "transparent": true,
+      "path": "/sprites/fixtures/shelf_snack.png",
+      "status": "verified"
+    },
+    "shopping_bag": {
+      "width": 92,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/shopping_bag.png",
+      "status": "candidate"
+    },
+    "shopping_basket": {
+      "width": 92,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/shopping_basket.png",
+      "status": "candidate"
+    },
+    "trash_bin": {
+      "width": 99,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/trash_bin.png",
+      "status": "candidate"
+    },
+    "wall_fridge_drink": {
+      "width": 85,
+      "height": 77,
+      "transparent": true,
+      "path": "/sprites/fixtures/wall_fridge_drink.png",
+      "status": "candidate"
+    },
+    "window": {
+      "width": 111,
+      "height": 84,
+      "transparent": true,
+      "path": "/sprites/fixtures/window.png",
+      "status": "candidate"
     }
   },
   "characters": {
     "clerk_male": {
-      "frameWidth": 48,
-      "frameHeight": 96,
+      "width": 144,
+      "height": 384,
       "columns": 3,
       "rows": 4,
       "directions": [
@@ -24,9 +156,8 @@
         "up"
       ],
       "framesPerDirection": 3,
-      "width": 144,
-      "height": 384,
-      "path": "/sprites/characters/clerk_male_sheet.png"
+      "path": "/sprites/characters/clerk_male_sheet.png",
+      "status": "verified"
     }
   }
 }
