@@ -7,8 +7,11 @@ import {
   shopperMaleOffice,
   shopperFemaleAdult,
   shopperMaleStudent,
+  atm,
   autoDoor,
+  coffeeMachine,
   freezerCase,
+  plant,
   registerCounter,
   shelfBento,
   shelfSnack,
@@ -35,6 +38,7 @@ type Direction =
   | Down
   | Left
   | Right
+  | Up
 
 struct Customer {
   phase: CustomerPhase,
@@ -174,14 +178,15 @@ fn advanceOne state: GameState -> GameState = {
   let nextBento = if decay then lower state.bentoStock 1 else state.bentoStock
   let nextDrink = if decay then lower state.drinkStock 1 else state.drinkStock
   let nextSpill = if state.spill then True else spillTurn nextTurn
-  let nextRisk = if state.studentRisk >= 4 then 0 else state.studentRisk + 1
   let theft = state.studentRisk >= 4
+  let nextRisk = if theft then 0 else state.studentRisk + 1
   let repLoss = missedNow * 7 + stockPenalty nextSnack nextBento nextDrink + (if nextSpill then 1 else 0) + (if theft then 4 else 0)
   GameState {
     ...state,
     turn: nextTurn,
     money: if theft then lower state.money 300 else state.money,
     reputation: lower state.reputation repLoss,
+    energy: lower state.energy 1,
     missed: state.missed + missedNow,
     theftLoss: state.theftLoss + (if theft then 300 else 0),
     combo: if missedNow > 0 || theft then 0 else state.combo,
@@ -271,7 +276,7 @@ fn restock shelf: ShelfId -> state: GameState -> GameState = {
   let label = match shelf {
     SnackShelf -> "スナック棚"
     BentoShelf -> "弁当棚"
-    DrinkShelf -> "ドリンク棚"
+    DrinkShelf -> "冷凍ケース"
   }
   GameState { ...progressed, selected: NoTarget, lastEvent: `${label}を補充した` }
 }
@@ -361,7 +366,7 @@ fn fixture path: String
     height,
     backgroundImage: `url('${path}')`,
     backgroundSize: "contain",
-    backgroundPosition: "center",
+    backgroundPosition: "center bottom",
     backgroundRepeat: "no-repeat",
     imageRendering: "pixelated"
   }) []
@@ -370,26 +375,48 @@ fn directionRow direction: Direction -> Int = match direction {
   Down -> 0
   Left -> 1
   Right -> 2
+  Up -> 3
+}
+
+fn characterFrame path: String
+  -> left: String
+  -> top: String
+  -> direction: Direction
+  -> html.Html<Task<Unit>> = {
+  let row = directionRow direction
+  node (html.style {
+    position: "absolute",
+    left,
+    top,
+    width: "48px",
+    height: "96px",
+    backgroundColor: "transparent",
+    backgroundImage: `url('${path}')`,
+    backgroundSize: "144px 384px",
+    backgroundPosition: `0px ${0 - row * 96}px`,
+    backgroundRepeat: "no-repeat",
+    imageRendering: "pixelated"
+  }) []
 }
 
 fn pose id: Int -> phase: CustomerPhase -> Pose =
   if id == 7 then
     match phase {
-      Browsing -> Pose { left: "20%", top: "48%", direction: Down }
-      Queueing -> Pose { left: "24%", top: "68%", direction: Left }
-      Leaving -> Pose { left: "44%", top: "82%", direction: Right }
+      Browsing -> Pose { left: "266px", top: "92px", direction: Down }
+      Queueing -> Pose { left: "184px", top: "308px", direction: Left }
+      Leaving -> Pose { left: "166px", top: "374px", direction: Down }
     }
   else if id == 9 then
     match phase {
-      Browsing -> Pose { left: "58%", top: "39%", direction: Down }
-      Queueing -> Pose { left: "30%", top: "67%", direction: Left }
-      Leaving -> Pose { left: "47%", top: "82%", direction: Right }
+      Browsing -> Pose { left: "42px", top: "166px", direction: Down }
+      Queueing -> Pose { left: "232px", top: "310px", direction: Left }
+      Leaving -> Pose { left: "202px", top: "374px", direction: Down }
     }
   else
     match phase {
-      Browsing -> Pose { left: "72%", top: "52%", direction: Down }
-      Queueing -> Pose { left: "36%", top: "68%", direction: Left }
-      Leaving -> Pose { left: "51%", top: "82%", direction: Right }
+      Browsing -> Pose { left: "286px", top: "204px", direction: Left }
+      Queueing -> Pose { left: "280px", top: "310px", direction: Left }
+      Leaving -> Pose { left: "238px", top: "374px", direction: Down }
     }
 
 fn actor state: MutableSignal<GameState>
@@ -450,7 +477,7 @@ fn shelfButton state: MutableSignal<GameState>
       backgroundColor: "transparent",
       backgroundImage: `url('${path}')`,
       backgroundSize: "contain",
-      backgroundPosition: "center",
+      backgroundPosition: "center bottom",
       backgroundRepeat: "no-repeat",
       imageRendering: "pixelated",
       cursor: "pointer"
@@ -462,35 +489,53 @@ fn world state: MutableSignal<GameState> -> current: GameState -> html.Html<Task
   node (html.style {
     position: "relative",
     width: "100%",
-    height: "420px",
+    height: "470px",
     overflow: "hidden",
-    border: "1px solid #24465d",
+    border: "1px solid #34566a",
     borderRadius: "20px",
-    backgroundColor: "#d8c8a6",
-    backgroundImage: "linear-gradient(rgba(96,78,51,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(96,78,51,0.10) 1px, transparent 1px)",
+    backgroundColor: "#d9c9a8",
+    backgroundImage: "linear-gradient(rgba(92,74,48,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(92,74,48,0.10) 1px, transparent 1px)",
     backgroundSize: "24px 24px",
-    boxShadow: "0 18px 50px rgba(0,0,0,0.32)"
+    boxShadow: "0 16px 44px rgba(0,0,0,0.28)"
   }) [
-    fixture (wallFridgeDrink ()) "5%" "4%" "31%" "14%",
-    fixture (autoDoor ()) "40%" "84%" "20%" "14%",
-    fixture (registerCounter ()) "4%" "68%" "38%" "17%",
-    shelfButton state SnackShelf (shelfSnack ()) "42%" "22%" "34%" "11%",
-    shelfButton state BentoShelf (shelfBento ()) "41%" "44%" "35%" "14%",
-    shelfButton state DrinkShelf (freezerCase ()) "61%" "65%" "31%" "14%",
-    fixture (clerkMale ()) "11%" "58%" "48px" "96px",
+    node (html.style {
+      position: "absolute",
+      left: "0",
+      top: "0",
+      width: "100%",
+      height: "12px",
+      background: "#c8b78f",
+      borderBottom: "2px solid rgba(73,54,31,0.18)"
+    }) [],
+
+    fixture (wallFridgeDrink ()) "18px" "20px" "85px" "77px",
+    fixture (atm ()) "300px" "26px" "60px" "67px",
+    fixture (coffeeMachine ()) "256px" "108px" "92px" "62px",
+
+    shelfButton state SnackShelf (shelfSnack ()) "112px" "108px" "144px" "48px",
+    shelfButton state BentoShelf (shelfBento ()) "98px" "196px" "180px" "77px",
+    shelfButton state DrinkShelf (freezerCase ()) "218px" "292px" "140px" "77px",
+
+    characterFrame (clerkMale ()) "70px" "264px" Down,
+    fixture (registerCounter ()) "20px" "326px" "160px" "75px",
+    fixture (plant ()) "316px" "186px" "46px" "62px",
+
     actor state current 7 (shopperMaleOffice ()) current.office,
     actor state current 9 (shopperFemaleAdult ()) current.adult,
     actor state current 12 (shopperMaleStudent ()) current.student,
+
+    fixture (autoDoor ()) "144px" "390px" "98px" "80px",
+
     if current.spill then
       html.button {
         buttonType: "button",
         onClick: dispatch state (Select SpillTarget),
         style: html.style {
           position: "absolute",
-          left: "55%",
-          top: "64%",
+          left: "188px",
+          top: "282px",
           width: "62px",
-          height: "34px",
+          height: "32px",
           border: "2px solid #ffb74d",
           borderRadius: "999px",
           background: "rgba(255,183,77,0.28)",
@@ -513,14 +558,14 @@ fn stockOf current: GameState -> shelf: ShelfId -> Int = match shelf {
 fn shelfName shelf: ShelfId -> String = match shelf {
   SnackShelf -> "スナック棚"
   BentoShelf -> "弁当棚"
-  DrinkShelf -> "ドリンク棚"
+  DrinkShelf -> "冷凍ケース"
 }
 
 fn selectedPanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
   match current.selected {
     NoTarget ->
       node (html.style { display: "grid", gap: "10px" }) [
-        text (html.style { fontSize: "13px", color: "#9db4c4" }) "店内の客・棚・トラブルをタップ",
+        text (html.style { fontSize: "13px", color: "#9db4c4" }) "客・棚・トラブルをタップして行動を選ぶ",
         actionButton state "☕ 2ターン休憩する" Break False
       ]
     CustomerTarget id -> {
@@ -609,14 +654,14 @@ fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<
   node (html.style {
     minHeight: "100vh",
     boxSizing: "border-box",
-    padding: "14px",
+    padding: "14px 14px 22px",
     background: "linear-gradient(180deg, #06111b, #02070b)",
     color: "#eef8ff",
     fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
   }) [
     node (html.style {
       width: "100%",
-      maxWidth: "430px",
+      maxWidth: "390px",
       marginLeft: "auto",
       marginRight: "auto",
       display: "grid",
@@ -630,7 +675,7 @@ fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<
         padding: "14px",
         border: "1px solid #24465d",
         borderRadius: "18px",
-        background: "rgba(5,17,26,0.96)"
+        background: "rgba(5,17,26,0.98)"
       }) [selectedPanel state current]
     ]
   ]
