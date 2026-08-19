@@ -1,151 +1,104 @@
-# Midnight Konbini Pixel Asset Specification v1
+# Midnight Konbini Pixel Asset Specification v1.1
 
-この文書を、`midnight-konbini` における **実装用ピクセルアセットの正本** とする。
+この文書を `midnight-konbini` の実装用ピクセルアセット仕様の正本とする。
 
-目的は「見栄えの良い画像を作ること」ではなく、**Seseragi の DOM 実装にそのまま載せられる、寸法・視点・透過・命名・アニメーション構造が確定したアセットを生成すること**。
-
-仕様に合わない生成物は、見た目が良くても採用しない。
+目的は、画像生成モデルに小さい実ピクセル寸法を無理に保証させることではなく、**統一したアートディレクションで生成した透過マスターを、固定ルールだけで実装可能な production sprite にすること**。
 
 ---
 
 ## 1. 基本方針
 
 - 背景は完全透過 PNG。
-- fixture は **1 asset = 1 file**。
-- character は **1 character = 1 sprite sheet**。
-- portrait は character 本体とは別 file。
+- fixture は `1 asset = 1 PNG`。
+- character は `1 character = 1 sprite sheet PNG`。
+- portrait は character 本体とは別 PNG。
 - v1 では atlas 化しない。
-- 生成後に Python 等でサイズ・余白・背景・座標を無理に補正する運用はしない。
-- 実装側が画像に合わせるのではなく、**画像がこの仕様に従う**。
-- 床・壁・通路などのベース環境は DOM / CSS で表現し、fixture sprite に焼き込まない。
+- 画像生成モデルの出力解像度は production size と一致しなくてよい。
+- production 化では、構図の描き直し・生成し直し・手作業の切り貼りをしない。
+- production 化で許可するのは、固定 grid 分割、alpha trim、aspect ratio を保った縮小、固定 anchor への配置、PNG の最適化だけ。
+- floor / wall / aisle / selection highlight は DOM / CSS で描画する。
 
 ---
 
-## 2. グリッド / 表示倍率
+## 2. Grid と production raster
 
-### 基準グリッド
+### Logical grid
 
-- 1 tile = **16 × 16 px**
-- render scale = **3x**
-- 実装上の 1 tile = **48 × 48 CSS px**
+- logical tile = **16 × 16**
+- render scale = **3**
+- production tile = **48 × 48 px**
 
-### 実装計算
+Seseragi 側では production sprite を原則 1:1 で表示する。
 
 ```text
-renderWidth  = tilesW * 16 * 3
-renderHeight = tilesH * 16 * 3
+productionWidth  = tilesW * 48
+productionHeight = tilesH * 48
 ```
 
-画像自体は下記仕様の native pixel size で生成する。CSS では nearest-neighbor 系の拡大を前提とする。
+`16 × 16` は world / placement の論理単位であり、production PNG の実解像度ではない。
 
 ---
 
-## 3. 共通アートディレクション
+## 3. Art direction
 
-### 視点
-
-- 2D top-down 寄りの俯瞰。
-- 完全な真上視点ではなく、fixture の正面・上面が少し見える角度。
-- 全 asset でカメラ角度を統一する。
-
-### 画風
-
-- 高品質ピクセルアート。
-- アニメ寄りにしすぎず、ゲーム用 sprite として輪郭とシルエットが読みやすいこと。
-- 商品は細かく描くが、3x 表示時にノイズにならない密度に抑える。
-- 外周は濃い輪郭線。
-- 内部ディテールは 1px〜2px 相当のまとまりを意識する。
-
-### 光源
-
+- 2D top-down 寄りの斜め俯瞰。
+- fixture の正面と上面が少し見える固定 camera angle。
+- 高品質 pixel-art look。
+- dark outline。
 - 左上からの店内照明。
-- 影は弱く短い。
-- asset ごとに影方向を変えない。
-- 大きな落ち影を画像内へ焼き込まない。
-
-### 色
-
-- 店内 UI の dark navy とぶつからない、やや明るめの店舗色。
-- fixture 本体は neutral gray / navy / white を基調にし、商品色をアクセントにする。
-- キャラクターは背景床上でシルエットが読める明度差を持たせる。
+- 大きな cast shadow は焼き込まない。
+- fixture 本体は gray / navy / white を基調に、商品色を accent とする。
+- character は全方向・全 frame で同一人物に見えること。
+- 白背景、黒背景、床、壁を asset に含めない。
 
 ---
 
-## 4. 背景 / 透過仕様
+## 4. Fixture production size
 
-- canvas 全体の背景は **完全透過**。
-- 白・黒・単色背景の焼き込みは禁止。
-- 半透明の背景 halo 禁止。
-- 影を入れる場合も asset 本体周辺だけに限定し、外周へ不要な alpha ノイズを作らない。
-- fixture と character の周囲に白フチを作らない。
+fixture は静的 PNG。
 
----
-
-## 5. Fixture 仕様
-
-fixture は静的画像。v1 では animation を持たない。
-
-| ID | 内容 | Tile | Native px |
+| ID | 内容 | Tile footprint | Production px |
 |---|---|---:|---:|
-| `atm` | ATM | 1×2 | 16×32 |
-| `auto_door` | 自動ドア | 3×2 | 48×32 |
-| `register_counter` | レジカウンター | 4×2 | 64×32 |
-| `shelf_small` | 小型棚 | 2×1 | 32×16 |
-| `shelf_snack` | お菓子棚 | 3×1 | 48×16 |
-| `shelf_magazine` | 雑誌・書籍棚 | 2×2 | 32×32 |
-| `wall_fridge_drink` | 壁面冷蔵庫・ドリンク | 4×1 | 64×16 |
-| `shelf_bento` | 弁当・惣菜棚 | 3×1 | 48×16 |
-| `freezer_case` | 冷凍食品ケース | 3×1 | 48×16 |
-| `shelf_daily_goods` | 日用品棚 | 3×1 | 48×16 |
-| `staff_room_door` | 従業員室ドア | 1×2 | 16×32 |
-| `bulletin_board` | 掲示板 | 2×2 | 32×32 |
-| `plant` | 観葉植物 | 1×2 | 16×32 |
-| `trash_bin` | ゴミ箱 | 1×2 | 16×32 |
-| `banner_onigiri` | おにぎりのぼり | 1×3 | 16×48 |
-| `terminal_sub` | 補助レジ端末 | 1×2 | 16×32 |
+| `atm` | ATM | 1×2 | 48×96 |
+| `auto_door` | 自動ドア | 3×2 | 144×96 |
+| `register_counter` | レジカウンター | 4×2 | 192×96 |
+| `shelf_small` | 小型棚 | 2×1 | 96×48 |
+| `shelf_snack` | お菓子棚 | 3×1 | 144×48 |
+| `shelf_magazine` | 雑誌・書籍棚 | 2×2 | 96×96 |
+| `wall_fridge_drink` | 壁面冷蔵庫 | 4×1 | 192×48 |
+| `shelf_bento` | 弁当・惣菜棚 | 3×1 | 144×48 |
+| `freezer_case` | 冷凍食品ケース | 3×1 | 144×48 |
+| `shelf_daily_goods` | 日用品棚 | 3×1 | 144×48 |
+| `staff_room_door` | 従業員室ドア | 1×2 | 48×96 |
+| `bulletin_board` | 掲示板 | 2×2 | 96×96 |
+| `plant` | 観葉植物 | 1×2 | 48×96 |
+| `trash_bin` | ゴミ箱 | 1×2 | 48×96 |
+| `banner_onigiri` | のぼり | 1×3 | 48×144 |
+| `terminal_sub` | 補助端末 | 1×2 | 48×96 |
 
-### Fixture layout rule
+### Fixture anchor
 
-- 指定 native px canvas からはみ出さない。
-- 接地物は canvas 下端を基準に置く。
-- 左右の透明余白は原則均等。
-- 上部看板を含む場合も指定サイズ内に収める。
-- fixture の床・壁面背景は含めない。
+- production canvas からはみ出さない。
+- 接地面は canvas 下端基準。
+- 左右透明余白は原則均等。
+- crop / background-position は不要。DOM `<img>` でそのまま置けること。
 
 ---
 
-## 6. Character sprite sheet 仕様
+## 5. Character sprite sheet
 
-店内で動く人物は固定立ち絵ではなく、**4方向 × 3フレーム** の sprite sheet とする。
+店内 character は **4 directions × 3 frames**。
 
-### 1 frame
+### Frame
 
-- frame size = **16 × 32 px**
-- tile footprint = **1 × 2**
-- render size = **48 × 96 CSS px**
+- frame = **48 × 96 px**
+- logical footprint = **1 × 2 tile**
 
-### Direction
+### Sheet
 
-方向順は固定。
-
-```text
-down
-left
-right
-up
-```
-
-### Frames per direction
-
-各方向 3 frame。
-
-```text
-idle
-walk_1
-walk_2
-```
-
-### Sheet layout
+- columns = 3
+- rows = 4
+- sheet = **144 × 384 px**
 
 ```text
 row 0: down_idle   down_walk_1   down_walk_2
@@ -154,230 +107,133 @@ row 2: right_idle  right_walk_1  right_walk_2
 row 3: up_idle     up_walk_1     up_walk_2
 ```
 
-sheet size は **48 × 128 px**。
+### Anchor
 
-### Character anchor rule
+- 足元 baseline は全 12 frame で固定。
+- frame 内で水平中央に置く。
+- idle / walk で全身位置が飛ばない。
+- direction が変わっても髪型、服、体格、色を維持する。
 
-- 各 frame の足元位置を揃える。
-- 各方向で頭頂位置・体格が不自然に変わらない。
-- idle / walk 間でキャラ全体が左右へジャンプしない。
-- walk は足と腕の差分を主とし、顔や髪型を別人物のように変えない。
-- down / left / right / up で服装・髪型・バッグ等の特徴を保持する。
-- 全 frame で canvas 外へのはみ出し禁止。
+### v1 lineup
 
----
-
-## 7. v1 Character lineup
-
-最初に作る playable / NPC 用キャラは以下。
-
-| ID | 用途 |
-|---|---|
-| `clerk_male` | 男性店員 |
-| `shopper_male_office` | 男性会社員客 |
-| `shopper_female_adult` | 成人女性客 |
-| `shopper_male_student` | 男子大学生客 |
-
-追加候補は v1 最小セット完成後に扱う。
+- `clerk_male`
+- `shopper_male_office`
+- `shopper_female_adult`
+- `shopper_male_student`
 
 ---
 
-## 8. Portrait 仕様
+## 6. Portrait
 
-右側の「選択中の顧客」パネル等に使う UI portrait は character sheet と別 asset。
-
-- 1 character = 1 file
-- native size = **16 × 16 px**
-- render size = **48 × 48 CSS px**
+- 1 character = 1 PNG
+- production size = **48 × 48 px**
 - 背景完全透過
-- 正面顔中心
 - character sheet と髪型・服装・色を一致させる
 
-命名例:
+---
 
-```text
-portrait_clerk_male.png
-portrait_shopper_male_office.png
-```
+## 7. Source master -> production sprite
+
+画像生成は production 解像度より大きい透過 master を作る。
+
+### Fixture
+
+1. 透明背景 master を生成。
+2. asset 全体を production canvas の aspect ratio に合わせる。
+3. aspect ratio を維持したまま production size へ縮小。
+4. alpha を維持して PNG 保存。
+
+### Character
+
+1. `3 columns × 4 rows` の透明 sprite master を生成。
+2. master を固定 3×4 grid で分割。
+3. 各 cell 内だけ alpha bbox を取得。
+4. character identity を変更せず frame 内へ aspect-fit。
+5. 水平中央、固定 foot baseline に配置。
+6. `48×96 × 12` を `144×384` に再 pack。
+
+禁止:
+
+- AI による後処理で frame を描き直す
+- frame ごとの手動スケール調整
+- arbitrary crop
+- 背景除去の推測処理
+- asset ごとに異なる補正ルール
 
 ---
 
-## 9. ファイル命名 / 配置
-
-すべて `snake_case`。
+## 8. File layout
 
 ```text
 public/
   sprites/
     fixtures/
-      atm.png
-      auto_door.png
-      register_counter.png
-      shelf_small.png
       shelf_snack.png
-      shelf_magazine.png
-      wall_fridge_drink.png
-      freezer_case.png
       ...
-
     characters/
       clerk_male_sheet.png
-      shopper_male_office_sheet.png
-      shopper_female_adult_sheet.png
-      shopper_male_student_sheet.png
-
+      ...
     portraits/
       portrait_clerk_male.png
-      portrait_shopper_male_office.png
-      portrait_shopper_female_adult.png
-      portrait_shopper_male_student.png
+      ...
+
+assets/
+  manifest.json
 ```
+
+すべて `snake_case`。
 
 ---
 
-## 10. Manifest contract
-
-実装側は、画像そのものから寸法を推測しない。
-
-将来的な asset metadata は以下の contract を基準とする。
+## 9. Manifest contract
 
 ```json
 {
   "tileSize": 16,
   "renderScale": 3,
   "fixtures": {
-    "register_counter": {
-      "tilesW": 4,
-      "tilesH": 2,
-      "path": "/sprites/fixtures/register_counter.png"
+    "shelf_snack": {
+      "tilesW": 3,
+      "tilesH": 1,
+      "nativeWidth": 144,
+      "nativeHeight": 48,
+      "path": "/sprites/fixtures/shelf_snack.png"
     }
   },
   "characters": {
     "clerk_male": {
-      "frameWidth": 16,
-      "frameHeight": 32,
+      "frameWidth": 48,
+      "frameHeight": 96,
+      "sheetWidth": 144,
+      "sheetHeight": 384,
       "directions": ["down", "left", "right", "up"],
       "framesPerDirection": 3,
       "path": "/sprites/characters/clerk_male_sheet.png"
-    }
-  },
-  "portraits": {
-    "portrait_clerk_male": {
-      "width": 16,
-      "height": 16,
-      "path": "/sprites/portraits/portrait_clerk_male.png"
     }
   }
 }
 ```
 
----
-
-## 11. v1 最小アセットセット
-
-### Fixtures
-
-```text
-atm
-auto_door
-register_counter
-shelf_small
-shelf_snack
-shelf_magazine
-wall_fridge_drink
-freezer_case
-```
-
-### Characters
-
-```text
-clerk_male
-shopper_male_office
-shopper_female_adult
-shopper_male_student
-```
-
-### Portraits
-
-上記 4 character 分。
+実装側は画像から寸法を推測しない。
 
 ---
 
-## 12. 生成時の固定ルール
+## 10. Quality gate
 
-画像生成時は、毎回以下を明示する。
-
-- asset ID
-- native canvas size
-- transparent background
-- exact camera angle
-- same pixel density
-- same outline thickness
-- same lighting direction
-- same world scale
-- no floor / no wall background
-- no text unless the fixture itself requires signage
-- no extra props outside the requested asset
-
-character sheet の場合は追加で以下を明示する。
-
-- 48×128 px sheet
-- 16×32 px frame
-- 3 columns × 4 rows
-- row order: down / left / right / up
-- column order: idle / walk_1 / walk_2
-- identical character identity across all 12 frames
-- consistent foot anchor across all frames
+- PNG transparency が維持されている。
+- production dimensions が仕様と完全一致する。
+- frame grid が整数 pixel で切れる。
+- 白 / 黒 background がない。
+- alpha halo が目立たない。
+- perspective / light / scale が他 asset と一致する。
+- 1:1 表示で読みやすい。
+- character の全 12 frame で identity と foot anchor が一致する。
 
 ---
 
-## 13. 品質ゲート
+## 11. First accepted production assets
 
-以下を 1 つでも満たさない asset は本編へ入れない。
+- `public/sprites/fixtures/shelf_snack.png`: **144 × 48**
+- `public/sprites/characters/clerk_male_sheet.png`: **144 × 384** (`48 × 96` per frame)
 
-### Technical
-
-- 完全透過 PNG
-- native size が仕様どおり
-- 白背景 / 黒背景なし
-- 余計な alpha halo なし
-- canvas 外にはみ出さない
-- 3x nearest-neighbor 表示で輪郭が崩れない
-
-### Visual
-
-- 他 asset と視点が一致
-- 他 asset と scale が一致
-- 光源方向が一致
-- ピクセル密度が一致
-- fixture の設置面が一致
-- character の足元 anchor が一致
-- character の方向違いで別人化しない
-
-### Implementation
-
-- asset 単体で DOM `<img>` として配置可能
-- fixture は crop / background-position を必要としない
-- character だけ frame crop で扱う
-- runtime で Python 加工や画像再生成を必要としない
-
----
-
-## 14. 実装ルール
-
-- fixture は `<img>` を絶対配置。
-- character は sprite sheet を 16×32 frame window で表示。
-- `direction` と `frameIndex` から crop 位置を決定する。
-- 床・壁・通路・選択ハイライトは DOM / CSS。
-- character animation は将来の Clock / Fiber / game loop 実装後に `frameIndex` を更新する。
-- v1 の asset correctness を確認するまで atlas 化しない。
-
----
-
-## 15. Source of truth
-
-この文書の数値・命名・row/column order を正とする。
-
-生成プロンプト、manifest、Seseragi 実装のいずれかと矛盾した場合は、**この文書を先に更新してから他を追従させる**。
-
-仕様変更時は document title の version を更新する。
+この 2 asset を v1 の scale / rasterization reference とし、後続 asset は同じ pipeline で production 化する。
