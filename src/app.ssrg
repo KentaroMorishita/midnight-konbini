@@ -2,139 +2,393 @@ import * as dom from "std/web/dom"
 import * as html from "std/web/html"
 import * as signals from "std/signal"
 import { MutableSignal, Signal } from "std/signal"
-import { view as storeView } from "./store"
+import {
+  clerkMale,
+  shopperMaleOffice,
+  shopperFemaleAdult,
+  shopperMaleStudent,
+  autoDoor,
+  freezerCase,
+  registerCounter,
+  shelfBento,
+  shelfSnack,
+  wallFridgeDrink
+} from "./assets"
+
+type CustomerPhase =
+  | Entering
+  | Browsing
+  | Queueing
+  | Leaving
+
+type Incident =
+  | NoIncident
+  | Spill
+
+type ShelfId =
+  | SnackShelf
+  | BentoShelf
+  | DrinkShelf
+
+type Target =
+  | NoTarget
+  | CustomerTarget Int
+  | ShelfTarget ShelfId
+  | IncidentTarget
+
+type Direction =
+  | Down
+  | Left
+  | Right
+  | Up
+
+struct Customer {
+  phase: CustomerPhase,
+  patience: Int,
+  basket: Int,
+  progress: Int,
+  baseBasket: Int,
+  risk: Int
+}
+
+struct Pose {
+  left: String,
+  top: String,
+  direction: Direction
+}
 
 struct GameState {
-  hour: Int,
-  minute: Int,
-  sales: Int,
-  satisfaction: Int,
-  stockAlerts: Int,
-  cleanliness: Int,
+  tick: Int,
+  money: Int,
+  reputation: Int,
   energy: Int,
-  selectedCustomer: Int,
-  queue: Int,
-  paused: Bool,
-  nightMode: Bool,
-  flagged: Bool,
-  recommended: Bool,
+  served: Int,
+  abandoned: Int,
+  theftLoss: Int,
+  combo: Int,
+  stockSnack: Int,
+  stockBento: Int,
+  stockDrink: Int,
+  incident: Incident,
+  incidentAge: Int,
+  selected: Target,
+  office: Customer,
+  adult: Customer,
+  student: Customer,
   lastEvent: String
 }
 
 type GameAction =
-  | Advance Int
-  | TogglePause
-  | ToggleNightMode
-  | SelectCustomer Int
-  | Restock
-  | Clean
-  | PrioritizeCheckout
-  | RecommendProduct
-  | MarkSuspicious
-  | Log String
+  | Select Target
+  | Checkout Int
+  | HelpCustomer Int
+  | WatchStudent
+  | Restock ShelfId
+  | CleanIncident
+  | TakeBreak
+  | Restart
 
-let initialState: GameState = GameState {
-  hour: 23,
-  minute: 47,
-  sales: 398670,
-  satisfaction: 86,
-  stockAlerts: 7,
-  cleanliness: 78,
-  energy: 62,
-  selectedCustomer: 12,
-  queue: 2,
-  paused: False,
-  nightMode: True,
-  flagged: False,
-  recommended: False,
-  lastEvent: "配送が到着しました（冷凍食品）"
+let officeInitial = Customer {
+  phase: Entering,
+  patience: 100,
+  basket: 620,
+  progress: 0,
+  baseBasket: 620,
+  risk: 0
 }
 
-fn toggle value: Bool -> Bool = if value then False else True
-fn cap100 value: Int -> Int = if value > 100 then 100 else value
+let adultInitial = Customer {
+  phase: Entering,
+  patience: 100,
+  basket: 480,
+  progress: 0,
+  baseBasket: 480,
+  risk: 0
+}
+
+let studentInitial = Customer {
+  phase: Entering,
+  patience: 100,
+  basket: 290,
+  progress: 0,
+  baseBasket: 290,
+  risk: 0
+}
+
+let initialState = GameState {
+  tick: 0,
+  money: 0,
+  reputation: 90,
+  energy: 100,
+  served: 0,
+  abandoned: 0,
+  theftLoss: 0,
+  combo: 0,
+  stockSnack: 5,
+  stockBento: 5,
+  stockDrink: 5,
+  incident: NoIncident,
+  incidentAge: 0,
+  selected: NoTarget,
+  office: officeInitial,
+  adult: adultInitial,
+  student: studentInitial,
+  lastEvent: "0:00 — 深夜シフト開始"
+}
+
+fn cap value: Int -> max: Int -> Int = if value > max then max else value
 fn floor0 value: Int -> Int = if value < 0 then 0 else value
-fn nextHour value: Int -> Int = if value >= 23 then 0 else value + 1
+fn lower value: Int -> amount: Int -> Int = floor0 (value - amount)
+fn raise value: Int -> amount: Int -> max: Int -> Int = cap (value + amount) max
 
-fn advanceTime amount: Int -> state: GameState -> GameState =
-  if state.minute + amount >= 60 then
-    GameState {
-      ...state,
-      hour: nextHour state.hour,
-      minute: state.minute + amount - 60,
-      sales: state.sales + amount * 31,
-      cleanliness: floor0 (state.cleanliness - 1),
-      energy: floor0 (state.energy - 1),
-      lastEvent: "時間を進めました。店内状況が更新されています"
-    }
-  else
-    GameState {
-      ...state,
-      minute: state.minute + amount,
-      sales: state.sales + amount * 31,
-      lastEvent: "時間を進めました。店内状況が更新されています"
-    }
+fn customerReset customer: Customer -> Customer = Customer {
+  ...customer,
+  phase: Entering,
+  patience: 100,
+  basket: customer.baseBasket,
+  progress: 0,
+  risk: 0
+}
 
-fn update action: GameAction -> state: GameState -> GameState =
-  match action {
-    Advance amount -> advanceTime amount state
-    TogglePause -> GameState {
-      ...state,
-      paused: toggle state.paused,
-      lastEvent: if state.paused then "営業シミュレーションを再開しました" else "営業シミュレーションを一時停止しました"
+fn willAbandon customer: Customer -> Bool = match customer.phase {
+  Queueing -> customer.patience <= 18
+  _ -> False
+}
+
+fn abandonDelta customer: Customer -> Int = if willAbandon customer then 1 else 0
+
+fn advanceCustomer customer: Customer -> Customer = match customer.phase {
+  Entering ->
+    if customer.progress >= 0 then Customer { ...customer, phase: Browsing, progress: 0 }
+    else Customer { ...customer, progress: customer.progress + 1 }
+  Browsing ->
+    if customer.progress >= 1 then Customer { ...customer, phase: Queueing, progress: 0 }
+    else Customer { ...customer, progress: customer.progress + 1 }
+  Queueing ->
+    if willAbandon customer then Customer { ...customer, phase: Leaving, progress: 0, patience: 0 }
+    else Customer { ...customer, patience: lower customer.patience 18 }
+  Leaving -> customerReset customer
+}
+
+fn advanceStudent customer: Customer -> Customer = match customer.phase {
+  Browsing ->
+    if customer.risk >= 3 then Customer { ...customer, phase: Leaving, progress: 0, risk: 0 }
+    else
+      if customer.progress >= 1 then Customer { ...customer, phase: Queueing, progress: 0, risk: customer.risk + 1 }
+      else Customer { ...customer, progress: customer.progress + 1, risk: customer.risk + 1 }
+  _ -> advanceCustomer customer
+}
+
+fn theftTriggered customer: Customer -> Bool = match customer.phase {
+  Browsing -> customer.risk >= 3
+  _ -> False
+}
+
+fn stockTick tick: Int -> Bool =
+  if tick == 4 then True
+  else if tick == 8 then True
+  else if tick == 12 then True
+  else if tick == 16 then True
+  else if tick == 20 then True
+  else False
+
+fn nextIncident tick: Int -> incident: Incident -> Incident = match incident {
+  Spill -> Spill
+  NoIncident ->
+    if tick == 5 then Spill
+    else if tick == 13 then Spill
+    else if tick == 19 then Spill
+    else NoIncident
+}
+
+fn incidentAgeAfter incident: Incident -> age: Int -> Incident -> Int =
+  \next: Incident -> match next {
+    NoIncident -> 0
+    Spill -> match incident {
+      NoIncident -> 0
+      Spill -> age + 1
     }
-    ToggleNightMode -> GameState {
-      ...state,
-      nightMode: toggle state.nightMode,
-      lastEvent: if state.nightMode then "通常表示へ切り替えました" else "深夜モードへ切り替えました"
-    }
-    SelectCustomer id -> GameState {
-      ...state,
-      selectedCustomer: id,
-      flagged: False,
-      recommended: False,
-      lastEvent: `顧客 #${id} を選択しました`
-    }
-    Restock -> GameState {
-      ...state,
-      stockAlerts: 0,
-      energy: floor0 (state.energy - 3),
-      lastEvent: "不足商品の補充を完了しました"
-    }
-    Clean -> GameState {
-      ...state,
-      cleanliness: cap100 (state.cleanliness + 15),
-      energy: floor0 (state.energy - 2),
-      satisfaction: cap100 (state.satisfaction + 1),
-      lastEvent: "店内清掃を実行しました"
-    }
-    PrioritizeCheckout -> GameState {
-      ...state,
-      queue: floor0 (state.queue - 1),
-      sales: state.sales + 748,
-      satisfaction: cap100 (state.satisfaction + 2),
-      lastEvent: "選択中の顧客を優先会計しました"
-    }
-    RecommendProduct -> GameState {
-      ...state,
-      recommended: True,
-      sales: state.sales + 160,
-      satisfaction: cap100 (state.satisfaction + 1),
-      lastEvent: "おすすめ商品を提案しました"
-    }
-    MarkSuspicious -> GameState {
-      ...state,
-      flagged: True,
-      lastEvent: "選択中の顧客を要注意としてマークしました"
-    }
-    Log message -> GameState { ...state, lastEvent: message }
   }
+
+fn incidentPenalty incident: Incident -> age: Int -> Int = match incident {
+  NoIncident -> 0
+  Spill -> if age >= 2 then 1 else 0
+}
+
+fn stockPenalty snack: Int -> bento: Int -> drink: Int -> Int =
+  (if snack == 0 then 1 else 0)
+  + (if bento == 0 then 1 else 0)
+  + (if drink == 0 then 1 else 0)
+
+fn advanceOne state: GameState -> GameState = {
+  let nextTick = state.tick + 1
+  let officeAbandoned = abandonDelta state.office
+  let adultAbandoned = abandonDelta state.adult
+  let studentAbandoned = abandonDelta state.student
+  let abandonedNow = officeAbandoned + adultAbandoned + studentAbandoned
+  let stolen = theftTriggered state.student
+  let nextIncidentValue = nextIncident nextTick state.incident
+  let nextIncidentAge = (incidentAgeAfter state.incident state.incidentAge) nextIncidentValue
+  let decay = stockTick nextTick
+  let nextSnack = if decay then lower state.stockSnack 1 else state.stockSnack
+  let nextBento = if decay then lower state.stockBento 1 else state.stockBento
+  let nextDrink = if decay then lower state.stockDrink 1 else state.stockDrink
+  let passivePenalty = incidentPenalty nextIncidentValue nextIncidentAge + stockPenalty nextSnack nextBento nextDrink
+  let repLoss = abandonedNow * 6 + passivePenalty + (if stolen then 4 else 0)
+  GameState {
+    ...state,
+    tick: nextTick,
+    money: if stolen then lower state.money 300 else state.money,
+    reputation: lower state.reputation repLoss,
+    abandoned: state.abandoned + abandonedNow,
+    theftLoss: state.theftLoss + (if stolen then 300 else 0),
+    combo: if abandonedNow > 0 || stolen then 0 else state.combo,
+    stockSnack: nextSnack,
+    stockBento: nextBento,
+    stockDrink: nextDrink,
+    incident: nextIncidentValue,
+    incidentAge: nextIncidentAge,
+    office: advanceCustomer state.office,
+    adult: advanceCustomer state.adult,
+    student: advanceStudent state.student
+  }
+}
+
+fn advanceBy amount: Int -> state: GameState -> GameState =
+  if amount <= 0 then state else advanceBy (amount - 1) (advanceOne state)
+
+fn customerById state: GameState -> id: Int -> Customer =
+  if id == 7 then state.office
+  else if id == 9 then state.adult
+  else state.student
+
+fn isQueueing customer: Customer -> Bool = match customer.phase {
+  Queueing -> True
+  _ -> False
+}
+
+fn isBrowsing customer: Customer -> Bool = match customer.phase {
+  Browsing -> True
+  _ -> False
+}
+
+fn customerName id: Int -> String =
+  if id == 7 then "会社員"
+  else if id == 9 then "買い物客"
+  else "学生"
+
+fn phaseLabel phase: CustomerPhase -> String = match phase {
+  Entering -> "入店中"
+  Browsing -> "商品を見ている"
+  Queueing -> "レジ待ち"
+  Leaving -> "退店中"
+}
+
+fn checkout id: Int -> state: GameState -> GameState = {
+  let customer = customerById state id
+  if isQueueing customer then
+    let progressed = advanceBy 1 state
+    let paid = customer.basket
+    if id == 7 then GameState {
+      ...progressed,
+      money: progressed.money + paid,
+      energy: lower progressed.energy 2,
+      served: progressed.served + 1,
+      combo: progressed.combo + 1,
+      office: Customer { ...progressed.office, phase: Leaving, progress: 0, patience: 100 },
+      lastEvent: `会社員を会計 +¥${paid}`
+    }
+    else if id == 9 then GameState {
+      ...progressed,
+      money: progressed.money + paid,
+      energy: lower progressed.energy 2,
+      served: progressed.served + 1,
+      combo: progressed.combo + 1,
+      adult: Customer { ...progressed.adult, phase: Leaving, progress: 0, patience: 100 },
+      lastEvent: `買い物客を会計 +¥${paid}`
+    }
+    else GameState {
+      ...progressed,
+      money: progressed.money + paid,
+      energy: lower progressed.energy 2,
+      served: progressed.served + 1,
+      combo: progressed.combo + 1,
+      student: Customer { ...progressed.student, phase: Leaving, progress: 0, patience: 100, risk: 0 },
+      lastEvent: `学生を会計 +¥${paid}`
+    }
+  else GameState { ...state, lastEvent: `${customerName id} はまだレジに並んでいない` }
+}
+
+fn helpCustomer id: Int -> state: GameState -> GameState = {
+  let customer = customerById state id
+  if isBrowsing customer then
+    let progressed = advanceBy 1 state
+    if id == 7 then GameState {
+      ...progressed,
+      energy: lower progressed.energy 1,
+      office: Customer { ...progressed.office, basket: progressed.office.basket + 160, patience: raise progressed.office.patience 10 100 },
+      lastEvent: "会社員を案内した。ついで買いが増えた"
+    }
+    else if id == 9 then GameState {
+      ...progressed,
+      energy: lower progressed.energy 1,
+      adult: Customer { ...progressed.adult, basket: progressed.adult.basket + 120, patience: raise progressed.adult.patience 10 100 },
+      lastEvent: "買い物客を案内した。満足そうだ"
+    }
+    else GameState {
+      ...progressed,
+      energy: lower progressed.energy 1,
+      student: Customer { ...progressed.student, basket: progressed.student.basket + 80, patience: raise progressed.student.patience 10 100, risk: lower progressed.student.risk 1 },
+      lastEvent: "学生に声をかけた"
+    }
+  else GameState { ...state, lastEvent: `${customerName id} は今は案内を必要としていない` }
+}
+
+fn restock shelf: ShelfId -> state: GameState -> GameState = {
+  let progressed = advanceBy 2 state
+  match shelf {
+    SnackShelf -> GameState { ...progressed, stockSnack: 6, energy: lower progressed.energy 4, lastEvent: "スナック棚を補充した" }
+    BentoShelf -> GameState { ...progressed, stockBento: 6, energy: lower progressed.energy 4, lastEvent: "弁当棚を補充した" }
+    DrinkShelf -> GameState { ...progressed, stockDrink: 6, energy: lower progressed.energy 4, lastEvent: "ドリンクを補充した" }
+  }
+}
+
+fn clean state: GameState -> GameState = match state.incident {
+  NoIncident -> GameState { ...state, lastEvent: "今は清掃が必要な場所はない" }
+  Spill -> {
+    let progressed = advanceBy 2 (GameState { ...state, incident: NoIncident, incidentAge: 0 })
+    GameState { ...progressed, energy: lower progressed.energy 3, reputation: raise progressed.reputation 2 100, lastEvent: "床の汚れを片付けた ★+2" }
+  }
+}
+
+fn watchStudent state: GameState -> GameState = {
+  let progressed = advanceBy 1 state
+  GameState {
+    ...progressed,
+    energy: lower progressed.energy 1,
+    student: Customer { ...progressed.student, risk: 0 },
+    lastEvent: "学生にさりげなく声をかけた。盗難リスク低下"
+  }
+}
+
+fn takeBreak state: GameState -> GameState = {
+  let progressed = advanceBy 2 state
+  GameState { ...progressed, energy: raise progressed.energy 22 100, combo: 0, lastEvent: "バックヤードで小休憩した ⚡+22" }
+}
+
+fn update action: GameAction -> state: GameState -> GameState = match action {
+  Select target -> GameState { ...state, selected: target }
+  Checkout id -> checkout id state
+  HelpCustomer id -> helpCustomer id state
+  WatchStudent -> watchStudent state
+  Restock shelf -> restock shelf state
+  CleanIncident -> clean state
+  TakeBreak -> takeBreak state
+  Restart -> initialState
+}
 
 fn dispatch state: MutableSignal<GameState> -> action: GameAction -> Task<Unit> =
   signals.update (update action) state
-
-fn timeText current: GameState -> String = `${current.hour}:${current.minute}`
-fn yen amount: Int -> String = `¥${amount}`
-fn percent amount: Int -> String = `${amount}%`
 
 fn node style: html.Style
   -> children: Array<html.Html<Task<Unit>>>
@@ -144,405 +398,427 @@ fn node style: html.Style
 fn text style: html.Style -> value: String -> html.Html<Task<Unit>> =
   html.div { style, children: value }
 
-fn empty style: html.Style -> html.Html<Task<Unit>> = text style ""
-
-fn actionButton state: MutableSignal<GameState>
-  -> style: html.Style
+fn button state: MutableSignal<GameState>
   -> label: String
   -> action: GameAction
+  -> primary: Bool
   -> html.Html<Task<Unit>> =
   html.button {
     buttonType: "button",
-    style,
     onClick: dispatch state action,
+    style: html.style {
+      minHeight: "46px",
+      padding: "10px 12px",
+      border: if primary then "1px solid #66d6ff" else "1px solid rgba(255,255,255,0.14)",
+      borderRadius: "13px",
+      background: if primary then "linear-gradient(180deg, #0d7196, #075778)" else "rgba(8,24,35,0.92)",
+      color: "#eefaff",
+      fontSize: "13px",
+      fontWeight: "850",
+      cursor: "pointer"
+    },
     children: label
   }
 
-let appStyle = html.style {
-  minHeight: "100vh",
-  minWidth: "1380px",
-  boxSizing: "border-box",
-  background: "#06111d",
-  color: "#d9e8f7",
-  padding: "10px",
-  fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+fn yen value: Int -> String = `¥${value}`
+fn percent value: Int -> String = `${value}%`
+
+fn shiftTime tick: Int -> String = {
+  let minutes = tick * 12
+  let hour = minutes / 60
+  let minute = minutes - hour * 60
+  let mm = if minute < 10 then `0${minute}` else `${minute}`
+  `${hour}:${mm}`
 }
 
-let topGridStyle = html.style {
-  display: "grid",
-  gridTemplateColumns: "250px repeat(6, minmax(0, 1fr)) 150px",
-  gap: "8px",
-  marginBottom: "8px"
-}
-
-let bodyGridStyle = html.style {
-  display: "grid",
-  gridTemplateColumns: "250px minmax(780px, 1fr) 320px",
-  gap: "8px",
-  minHeight: "575px"
-}
-
-let bottomGridStyle = html.style {
-  display: "grid",
-  gridTemplateColumns: "440px minmax(0, 1fr) 285px",
-  gap: "8px",
-  marginTop: "8px"
-}
-
-let panelStyle = html.style {
-  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
-  border: "1px solid #173b5a",
-  borderRadius: "8px",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-  overflow: "hidden"
-}
-
-let panelGapStyle = html.style {
-  marginTop: "8px",
-  background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
-  border: "1px solid #173b5a",
-  borderRadius: "8px",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-  overflow: "hidden"
-}
-
-let panelHeaderStyle = html.style {
-  padding: "8px 12px",
-  borderBottom: "1px solid #173b5a",
-  color: "#cfe7fb",
-  fontSize: "13px",
-  fontWeight: "800",
-  letterSpacing: "0.02em"
-}
-
-let titleCardStyle = html.style {
-  padding: "14px 16px",
-  background: "radial-gradient(circle at 18% 18%, rgba(46,164,255,0.20), transparent 32%), linear-gradient(180deg, #081827, #06111d)",
-  border: "1px solid #173b5a",
-  borderRadius: "8px",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
-}
-
-fn titleCard -> html.Html<Task<Unit>> =
-  node titleCardStyle [
-    text (html.style { color: "#47b8ff", fontSize: "27px", lineHeight: "1.05", fontWeight: "900", textShadow: "0 0 18px rgba(71,184,255,0.38)" }) "☾ 深夜コンビニ",
-    text (html.style { marginTop: "6px", marginLeft: "36px", color: "#b49aff", fontSize: "12px", letterSpacing: "0.18em", fontWeight: "700" }) "MIDNIGHT KONBINI"
+fn hudItem label: String -> value: String -> accent: String -> html.Html<Task<Unit>> =
+  node (html.style { minWidth: "0", display: "grid", gap: "1px" }) [
+    text (html.style { color: "#7f99a8", fontSize: "9px", fontWeight: "800", letterSpacing: "0.04em" }) label,
+    text (html.style { color: accent, fontSize: "15px", fontWeight: "900", whiteSpace: "nowrap" }) value
   ]
 
-fn metric label: String -> value: String -> foot: String -> html.Html<Task<Unit>> =
+fn hud current: GameState -> html.Html<Task<Unit>> =
   node (html.style {
-    padding: "11px 13px",
-    background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
-    border: "1px solid #173b5a",
-    borderRadius: "8px",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.28)"
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "6px",
+    padding: "10px 12px",
+    background: "linear-gradient(180deg, #081b26, #06141d)",
+    borderBottom: "1px solid rgba(102,214,255,0.16)"
   }) [
-    text (html.style { color: "#91a8bc", fontSize: "11px", fontWeight: "700" }) label,
-    text (html.style { marginTop: "7px", color: "#f4f9ff", fontSize: "24px", lineHeight: "1", fontWeight: "850" }) value,
-    text (html.style { marginTop: "7px", color: "#6fd36c", fontSize: "10px", fontWeight: "700" }) foot
+    hudItem "TIME" (shiftTime current.tick) "#8fddff",
+    hudItem "SALES" (yen current.money) "#f4f7f8",
+    hudItem "REP" `★ ${current.reputation}` (if current.reputation < 50 then "#ff867c" else "#9de487"),
+    hudItem "ENERGY" `⚡ ${current.energy}` (if current.energy < 25 then "#ffb866" else "#ffd978")
   ]
 
-fn topActions state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
-  node (html.style { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", alignContent: "center", padding: "10px" }) [
-    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "▥" (Log "売上レポートを確認しました"),
-    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "✉" (Log "メッセージを確認しました"),
-    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "⚙" (Log "設定を確認しました"),
-    actionButton state (html.style { height: "42px", border: "1px solid #214661", borderRadius: "7px", background: "#091a2a", color: "#9fbbd1", cursor: "pointer", fontSize: "18px" }) "☰" (Log "メニューを開きました")
-  ]
+fn fixture state: MutableSignal<GameState>
+  -> target: Target
+  -> path: String
+  -> left: String
+  -> top: String
+  -> width: String
+  -> height: String
+  -> html.Html<Task<Unit>> =
+  html.button {
+    buttonType: "button",
+    onClick: dispatch state (Select target),
+    style: html.style {
+      position: "absolute",
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      padding: "0",
+      border: "0",
+      backgroundColor: "transparent",
+      backgroundImage: `url('${path}')`,
+      backgroundSize: "contain",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      imageRendering: "pixelated",
+      filter: "drop-shadow(0 4px 3px rgba(43,32,22,0.22))",
+      cursor: "pointer"
+    },
+    children: ""
+  }
 
-fn topBar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  node topGridStyle [
-    titleCard (),
-    metric "時間" (timeText current) (if current.paused then "PAUSED" else "4月15日 / 夜勤中"),
-    metric "売上（本日）" (yen current.sales) "前日比  +12.4%",
-    metric "満足度" (percent current.satisfaction) "+3%",
-    metric "在庫アラート" `${current.stockAlerts}` (if current.stockAlerts == 0 then "補充済み" else "要対応"),
-    metric "清潔度" (percent current.cleanliness) (if current.cleanliness >= 85 then "良好" else "やや汚れている"),
-    metric "エネルギー" (percent current.energy) "残り 4.2時間",
-    topActions state
-  ]
+fn directionRow direction: Direction -> Int = match direction {
+  Down -> 0
+  Left -> 1
+  Right -> 2
+  Up -> 3
+}
 
-fn menuButton state: MutableSignal<GameState> -> label: String -> action: GameAction -> html.Html<Task<Unit>> =
-  actionButton state (html.style {
+fn frameFor tick: Int -> CustomerPhase -> Int = match phase {
+  Queueing -> 0
+  _ -> if tick / 2 * 2 == tick then 1 else 2
+}
+
+fn officePose customer: Customer -> Pose = match customer.phase {
+  Entering -> Pose { left: "47%", top: "78%", direction: Up }
+  Browsing -> Pose { left: "49%", top: "35%", direction: Up }
+  Queueing -> Pose { left: "22%", top: "67%", direction: Left }
+  Leaving -> Pose { left: "42%", top: "82%", direction: Down }
+}
+
+fn adultPose customer: Customer -> Pose = match customer.phase {
+  Entering -> Pose { left: "55%", top: "80%", direction: Up }
+  Browsing -> Pose { left: "65%", top: "49%", direction: Left }
+  Queueing -> Pose { left: "29%", top: "69%", direction: Left }
+  Leaving -> Pose { left: "48%", top: "84%", direction: Down }
+}
+
+fn studentPose customer: Customer -> Pose = match customer.phase {
+  Entering -> Pose { left: "42%", top: "82%", direction: Up }
+  Browsing -> Pose { left: "75%", top: "20%", direction: Up }
+  Queueing -> Pose { left: "36%", top: "71%", direction: Left }
+  Leaving -> Pose { left: "55%", top: "84%", direction: Down }
+}
+
+fn selectedCustomer selected: Target -> id: Int -> Bool = match selected {
+  CustomerTarget value -> value == id
+  _ -> False
+}
+
+fn urgency customer: Customer -> String = match customer.phase {
+  Queueing -> if customer.patience <= 36 then "!" else "…"
+  _ -> ""
+}
+
+fn customerActor state: MutableSignal<GameState>
+  -> current: GameState
+  -> id: Int
+  -> customer: Customer
+  -> path: String
+  -> pose: Pose
+  -> html.Html<Task<Unit>> = {
+  let row = directionRow pose.direction
+  let frame = frameFor current.tick customer.phase
+  let selected = selectedCustomer current.selected id
+  node (html.style {
+    position: "absolute",
+    left: pose.left,
+    top: pose.top,
+    width: "46px",
+    height: "92px",
+    zIndex: "60"
+  }) [
+    text (html.style {
+      position: "absolute",
+      right: "-2px",
+      top: "-5px",
+      zIndex: "3",
+      minWidth: if urgency customer == "" then "0" else "22px",
+      height: if urgency customer == "" then "0" else "22px",
+      borderRadius: "999px",
+      background: if customer.patience <= 36 then "#e85b50" else "#23384a",
+      color: "#fff",
+      fontSize: "13px",
+      fontWeight: "900",
+      textAlign: "center",
+      lineHeight: "22px"
+    }) (urgency customer),
+    html.button {
+      buttonType: "button",
+      onClick: dispatch state (Select (CustomerTarget id)),
+      style: html.style {
+        position: "absolute",
+        left: "0",
+        bottom: "0",
+        width: "42px",
+        height: "84px",
+        padding: "0",
+        border: if selected then "2px solid #64d9ff" else "2px solid transparent",
+        borderRadius: "10px",
+        backgroundColor: "transparent",
+        backgroundImage: `url('${path}')`,
+        backgroundSize: "126px 336px",
+        backgroundPosition: `${0 - frame * 42}px ${0 - row * 84}px`,
+        backgroundRepeat: "no-repeat",
+        imageRendering: "pixelated",
+        filter: if selected then "drop-shadow(0 0 7px rgba(75,205,255,0.85))" else "drop-shadow(0 4px 2px rgba(40,30,20,0.25))",
+        transition: "left 180ms ease, top 180ms ease"
+      },
+      children: ""
+    }
+  ]
+}
+
+fn clerkActor -> html.Html<Task<Unit>> =
+  node (html.style {
+    position: "absolute",
+    left: "12%",
+    top: "62%",
+    width: "42px",
+    height: "84px",
+    zIndex: "58",
+    backgroundImage: `url('${clerkMale ()}')`,
+    backgroundSize: "126px 336px",
+    backgroundPosition: "0px 0px",
+    backgroundRepeat: "no-repeat",
+    imageRendering: "pixelated",
+    filter: "drop-shadow(0 4px 2px rgba(40,30,20,0.25))"
+  }) []
+
+fn stockBadge label: String -> value: Int -> left: String -> top: String -> html.Html<Task<Unit>> =
+  text (html.style {
+    position: "absolute",
+    left: left,
+    top: top,
+    zIndex: "80",
+    padding: "3px 6px",
+    borderRadius: "999px",
+    background: if value <= 1 then "#b83f3a" else "rgba(7,24,34,0.86)",
+    color: "#fff",
+    fontSize: "9px",
+    fontWeight: "850",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.22)"
+  }) `${label} ${value}`
+
+fn spillMarker state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> = match current.incident {
+  NoIncident -> node (html.style {}) []
+  Spill -> html.button {
+    buttonType: "button",
+    onClick: dispatch state (Select IncidentTarget),
+    style: html.style {
+      position: "absolute",
+      left: "58%",
+      top: "68%",
+      zIndex: "70",
+      width: "52px",
+      height: "28px",
+      border: "1px solid #f0bd5d",
+      borderRadius: "50%",
+      background: "rgba(226,176,69,0.42)",
+      color: "#3b2a10",
+      fontWeight: "900",
+      boxShadow: "0 0 0 5px rgba(226,176,69,0.10)",
+      cursor: "pointer"
+    },
+    children: "汚れ"
+  }
+}
+
+fn world state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node (html.style {
+    position: "relative",
     width: "100%",
-    boxSizing: "border-box",
-    marginBottom: "7px",
-    padding: "10px 11px",
-    border: "1px solid #1d4663",
-    borderRadius: "6px",
-    background: "linear-gradient(180deg, #0c2337, #091b2a)",
-    color: "#d9e8f7",
-    cursor: "pointer",
-    fontWeight: "700",
-    textAlign: "left"
-  }) label action
-
-fn menuPanel state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
-  node panelStyle [
-    text panelHeaderStyle "管理メニュー",
-    node (html.style { padding: "9px" }) [
-      menuButton state "▣  発注・補充                         F1" Restock,
-      menuButton state "✦  清掃                               F2" Clean,
-      menuButton state "●  レジ管理                           F3" (Log "レジ管理パネルを確認しました"),
-      menuButton state "◆  防犯・警備                         F4" (Log "防犯モニターを確認しました"),
-      menuButton state "◇  価格チェック                       F5" (Log "価格チェックを開始しました"),
-      menuButton state "◷  シフト管理                         F6" (Log "シフト状況を確認しました")
-    ]
-  ]
-
-fn miniDot left: String -> top: String -> color: String -> html.Html<Task<Unit>> =
-  empty (html.style { position: "absolute", left, top, width: "8px", height: "8px", borderRadius: "50%", background: color, boxShadow: `0 0 10px ${color}` })
-
-fn mapPanel -> html.Html<Task<Unit>> =
-  node panelGapStyle [
-    text panelHeaderStyle "店舗マップ",
+    height: "58vh",
+    minHeight: "410px",
+    maxHeight: "610px",
+    overflow: "hidden",
+    backgroundColor: "#d9ccb0",
+    backgroundImage: "linear-gradient(rgba(105,88,60,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(105,88,60,0.10) 1px, transparent 1px)",
+    backgroundSize: "24px 24px",
+    borderBottom: "1px solid rgba(21,47,62,0.35)"
+  }) [
     node (html.style {
-      position: "relative",
-      height: "160px",
-      margin: "10px",
-      border: "1px solid #246e9e",
-      borderRadius: "5px",
-      backgroundColor: "#061b2c",
-      backgroundImage: "linear-gradient(rgba(61,139,194,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(61,139,194,0.10) 1px, transparent 1px)",
-      backgroundSize: "20px 20px"
-    }) [
-      empty (html.style { position: "absolute", left: "10%", top: "12%", width: "76%", height: "70%", border: "2px solid #258dd1" }),
-      miniDot "20%" "25%" "#65d66b",
-      miniDot "45%" "36%" "#42b9ff",
-      miniDot "66%" "22%" "#ff5b56",
-      miniDot "72%" "61%" "#8c7bff",
-      miniDot "34%" "68%" "#ffd452"
-    ],
-    node (html.style { display: "flex", justifyContent: "space-between", padding: "0 10px 10px", color: "#91a8bc", fontSize: "11px" }) [
-      text (html.style {}) "−",
-      text (html.style {}) "100%",
-      text (html.style {}) "+",
-      text (html.style {}) "全体"
-    ]
+      position: "absolute",
+      left: "0",
+      top: "0",
+      width: "100%",
+      height: "7%",
+      background: "#23333d",
+      boxShadow: "0 6px 14px rgba(0,0,0,0.18)"
+    }) [],
+    fixture state (ShelfTarget DrinkShelf) (wallFridgeDrink ()) "8%" "6%" "32%" "17%",
+    fixture state (ShelfTarget SnackShelf) (shelfSnack ()) "12%" "31%" "34%" "10%",
+    fixture state (ShelfTarget BentoShelf) (shelfBento ()) "58%" "35%" "34%" "14%",
+    fixture state (ShelfTarget BentoShelf) (freezerCase ()) "58%" "55%" "30%" "13%",
+    fixture state NoTarget (registerCounter ()) "4%" "69%" "34%" "14%",
+    fixture state NoTarget (autoDoor ()) "39%" "86%" "24%" "10%",
+    stockBadge "DRINK" current.stockDrink "9%" "19%",
+    stockBadge "SNACK" current.stockSnack "13%" "39%",
+    stockBadge "BENTO" current.stockBento "59%" "48%",
+    clerkActor (),
+    customerActor state current 7 current.office (shopperMaleOffice ()) (officePose current.office),
+    customerActor state current 9 current.adult (shopperFemaleAdult ()) (adultPose current.adult),
+    customerActor state current 12 current.student (shopperMaleStudent ()) (studentPose current.student),
+    spillMarker state current
   ]
 
-fn leftSidebar state: MutableSignal<GameState> -> html.Html<Task<Unit>> =
-  node (html.style {}) [menuPanel state, mapPanel ()]
+fn shelfName shelf: ShelfId -> String = match shelf {
+  SnackShelf -> "スナック棚"
+  BentoShelf -> "弁当・冷凍"
+  DrinkShelf -> "ドリンク冷蔵"
+}
 
-fn storePanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+fn shelfStock current: GameState -> shelf: ShelfId -> Int = match shelf {
+  SnackShelf -> current.stockSnack
+  BentoShelf -> current.stockBento
+  DrinkShelf -> current.stockDrink
+}
+
+fn targetTitle current: GameState -> String = match current.selected {
+  NoTarget -> "次に何をする？"
+  CustomerTarget id -> `${customerName id} · ${phaseLabel (customerById current id).phase}`
+  ShelfTarget shelf -> `${shelfName shelf} · 在庫 ${shelfStock current shelf}/6`
+  IncidentTarget -> "床の汚れ · 放置すると評判低下"
+}
+
+fn targetSub current: GameState -> String = match current.selected {
+  NoTarget -> current.lastEvent
+  CustomerTarget id -> {
+    let c = customerById current id
+    `カゴ ${yen c.basket} · 忍耐 ${percent c.patience}${if id == 12 && c.risk > 0 then ` · 👀 ${c.risk}` else ""}`
+  }
+  ShelfTarget _ -> "補充は2tick。レジ待ちを放置するリスクあり"
+  IncidentTarget -> `放置 ${current.incidentAge}tick`
+}
+
+fn customerControls state: MutableSignal<GameState> -> current: GameState -> id: Int -> html.Html<Task<Unit>> = {
+  let c = customerById current id
+  if isQueueing c then
+    node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }) [
+      button state `会計する ${yen c.basket}` (Checkout id) True,
+      if id == 12 then button state "声をかける" WatchStudent False else button state "様子を見る" (Select (CustomerTarget id)) False
+    ]
+  else if isBrowsing c then
+    node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }) [
+      button state "案内する" (HelpCustomer id) True,
+      if id == 12 then button state "さりげなく声かけ" WatchStudent False else button state "そのまま任せる" (Select NoTarget) False
+    ]
+  else
+    node (html.style { display: "grid", gridTemplateColumns: "1fr", gap: "8px" }) [
+      button state "店内を見る" (Select NoTarget) False
+    ]
+}
+
+fn controls state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> = match current.selected {
+  NoTarget -> node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }) [
+    button state "小休憩 ⚡+22" TakeBreak False,
+    button state "店内を確認" (Select NoTarget) False
+  ]
+  CustomerTarget id -> customerControls state current id
+  ShelfTarget shelf -> node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }) [
+    button state "補充する · 2tick" (Restock shelf) True,
+    button state "後回し" (Select NoTarget) False
+  ]
+  IncidentTarget -> node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }) [
+    button state "清掃する · 2tick" CleanIncident True,
+    button state "後回し" (Select NoTarget) False
+  ]
+}
+
+fn score current: GameState -> Int =
+  current.money + current.reputation * 20 + current.served * 120 - current.abandoned * 250 - current.theftLoss
+
+fn rank current: GameState -> String = {
+  let value = score current
+  if value >= 6500 then "S"
+  else if value >= 5200 then "A"
+  else if value >= 4000 then "B"
+  else if value >= 2800 then "C"
+  else "D"
+}
+
+fn result state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
   node (html.style {
-    display: "flex",
+    minHeight: "100vh",
+    display: "grid",
     alignItems: "center",
-    justifyContent: "center",
-    padding: "7px",
-    background: "linear-gradient(180deg, rgba(9,29,47,0.98), rgba(5,18,31,0.98))",
-    border: "1px solid #173b5a",
-    borderRadius: "8px",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-    overflow: "hidden"
-  }) [
-    storeView
-      current.selectedCustomer
-      current.nightMode
-      (dispatch state (SelectCustomer 12))
-      (dispatch state (SelectCustomer 7))
-      (dispatch state (SelectCustomer 4))
-      (dispatch state (SelectCustomer 9))
-      (dispatch state (SelectCustomer 15))
-  ]
-
-fn customerName id: Int -> String = match id {
-  12 -> "大学生"
-  7 -> "会社員"
-  4 -> "会社員"
-  9 -> "専門学生"
-  15 -> "常連客"
-  _ -> "来店客"
-}
-
-fn customerVisits id: Int -> Int = match id {
-  12 -> 7
-  7 -> 3
-  4 -> 11
-  9 -> 2
-  15 -> 24
-  _ -> 1
-}
-
-fn customerSpend id: Int -> Int = match id {
-  12 -> 18540
-  7 -> 6920
-  4 -> 31740
-  9 -> 3580
-  15 -> 65420
-  _ -> 980
-}
-
-fn customerPatience id: Int -> Int = match id {
-  12 -> 78
-  7 -> 51
-  4 -> 91
-  9 -> 63
-  15 -> 84
-  _ -> 70
-}
-
-fn customerTotal id: Int -> Int = match id {
-  12 -> 748
-  7 -> 612
-  4 -> 1098
-  9 -> 498
-  15 -> 1382
-  _ -> 320
-}
-
-fn avatar -> html.Html<Task<Unit>> =
-  node (html.style {
-    width: "66px",
-    height: "66px",
+    padding: "24px",
     boxSizing: "border-box",
-    paddingTop: "8px",
-    border: "1px solid #36536a",
-    borderRadius: "7px",
-    background: "linear-gradient(180deg, #22313d, #152430)"
+    background: "radial-gradient(circle at 50% 20%, #123247, #06121b 58%)",
+    color: "#edf8fd",
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
   }) [
-    empty (html.style { width: "20px", height: "20px", margin: "0 auto", borderRadius: "50%", background: "#e5b58f", border: "2px solid #2d2929" }),
-    empty (html.style { width: "27px", height: "31px", margin: "-1px auto 0", borderRadius: "8px 8px 5px 5px", background: "#1f2933", border: "2px solid #292f35" })
-  ]
-
-fn progress value: Int -> html.Html<Task<Unit>> =
-  empty (html.style { width: `${value}%`, height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #59db63, #91dc35)" })
-
-fn basketLine icon: String -> name: String -> price: Int -> html.Html<Task<Unit>> =
-  node (html.style { display: "grid", gridTemplateColumns: "22px 1fr auto", gap: "6px", padding: "5px 0", color: "#d3e2ef", fontSize: "12px" }) [
-    text (html.style {}) icon,
-    text (html.style {}) name,
-    text (html.style {}) (yen price)
-  ]
-
-fn customerPanel state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  node panelStyle [
-    text panelHeaderStyle "選択中の顧客",
-    node (html.style { padding: "11px" }) [
-      node (html.style { display: "grid", gridTemplateColumns: "76px 1fr", gap: "10px", alignItems: "center" }) [
-        avatar (),
-        node (html.style {}) [
-          text (html.style { color: "#f3f8fc", fontSize: "19px", fontWeight: "850" }) `顧客 #${current.selectedCustomer}`,
-          text (html.style { marginTop: "5px", color: "#64bbff", fontSize: "11px", fontWeight: "800" }) (customerName current.selectedCustomer),
-          text (html.style { marginTop: "6px", color: "#8aa3b9", fontSize: "11px" }) `来店数: ${customerVisits current.selectedCustomer}回`,
-          text (html.style { marginTop: "2px", color: "#8aa3b9", fontSize: "11px" }) `累計購入額: ¥${customerSpend current.selectedCustomer}`
-        ]
+    node (html.style { maxWidth: "420px", width: "100%", marginLeft: "auto", marginRight: "auto", textAlign: "center" }) [
+      text (html.style { color: "#82d9ff", fontSize: "12px", fontWeight: "900", letterSpacing: "0.18em" }) "05:00 · SHIFT COMPLETE",
+      text (html.style { marginTop: "12px", fontSize: "92px", lineHeight: "1", fontWeight: "950" }) (rank current),
+      text (html.style { marginTop: "6px", color: "#9eb8c8", fontSize: "13px" }) `SCORE ${score current}`,
+      node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "24px", textAlign: "left" }) [
+        text (html.style { padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.06)" }) `売上  ${yen current.money}`,
+        text (html.style { padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.06)" }) `評判  ★${current.reputation}`,
+        text (html.style { padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.06)" }) `会計  ${current.served}人`,
+        text (html.style { padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.06)" }) `離脱  ${current.abandoned}人`,
+        text (html.style { gridColumn: "1 / -1", padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.06)" }) `盗難ロス  ${yen current.theftLoss}`
       ],
-      node (html.style { marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #183a55" }) [
-        node (html.style { display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", fontWeight: "700" }) [
-          text (html.style {}) "待ち時間（忍耐力）",
-          text (html.style {}) "01:32"
-        ],
-        node (html.style { height: "8px", borderRadius: "999px", background: "#173149", overflow: "hidden" }) [progress (customerPatience current.selectedCustomer)]
-      ],
-      node (html.style { marginTop: "13px" }) [
-        text (html.style { color: "#d7e7f3", fontSize: "12px", fontWeight: "800" }) "カゴの中身",
-        basketLine "◒" "おにぎり 鮭" 130,
-        basketLine "▣" "からあげ弁当" 498,
-        basketLine "▮" "緑茶 600ml" 120,
-        node (html.style { display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid #24445c", fontWeight: "900" }) [
-          text (html.style {}) "合計",
-          text (html.style {}) (yen (customerTotal current.selectedCustomer))
-        ]
-      ],
-      node (html.style { marginTop: "12px" }) [
-        text (html.style { marginBottom: "7px", fontSize: "12px", fontWeight: "800" }) "クイックアクション",
-        node (html.style { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }) [
-          actionButton state (html.style { padding: "9px 8px", border: "1px solid #67d47d", borderRadius: "6px", background: "#081a29", color: "#67d47d", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) "☆ 会計を優先" PrioritizeCheckout,
-          actionButton state (html.style { padding: "9px 8px", border: "1px solid #b284f3", borderRadius: "6px", background: "#081a29", color: "#b284f3", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) (if current.recommended then "✓ 提案済み" else "♡ 商品をおすすめ") RecommendProduct,
-          actionButton state (html.style { gridColumn: "1 / -1", padding: "9px 8px", border: "1px solid #e55e59", borderRadius: "6px", background: "#081a29", color: if current.flagged then "#ffb14a" else "#e55e59", cursor: "pointer", fontSize: "11px", fontWeight: "800" }) (if current.flagged then "⚑ 要注意として登録済み" else "⚑ 不審としてマーク") MarkSuspicious
-        ]
-      ]
+      node (html.style { marginTop: "22px" }) [button state "もう一度 夜勤に入る" Restart True]
     ]
   ]
 
-fn taskRow icon: String -> label: String -> time: String -> color: String -> html.Html<Task<Unit>> =
-  node (html.style { display: "grid", gridTemplateColumns: "20px 1fr auto", gap: "7px", padding: "6px 0", color: "#d5e4ef", fontSize: "11px" }) [
-    text (html.style { color: color }) icon,
-    text (html.style {}) label,
-    text (html.style { color: "#8aa3b9" }) time
-  ]
-
-fn taskQueue current: GameState -> html.Html<Task<Unit>> =
-  node panelGapStyle [
-    text panelHeaderStyle "タスク・キュー",
-    node (html.style { padding: "8px 12px 10px" }) [
-      taskRow "●" `レジに並ぶ（${current.queue}人）` "01:32" "#a98cff",
-      taskRow "▦" "品出し：カップ麺 売り場" "02:15" "#ffb347",
-      taskRow "♧" "清掃：トイレ" "03:40" "#49c8ff",
-      taskRow "♙" "ゴミ回収" "04:05" "#68d36d"
-    ]
-  ]
-
-fn rightSidebar state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  node (html.style {}) [customerPanel state current, taskQueue current]
-
-fn eventLine time: String -> icon: String -> label: String -> color: String -> html.Html<Task<Unit>> =
-  node (html.style { display: "grid", gridTemplateColumns: "42px 18px 1fr", gap: "5px", padding: "3px 0", color: color, fontSize: "10px" }) [
-    text (html.style { color: "#8097ab" }) time,
-    text (html.style {}) icon,
-    text (html.style {}) label
-  ]
-
-fn eventLog current: GameState -> html.Html<Task<Unit>> =
-  node panelStyle [
-    text panelHeaderStyle "イベントログ",
-    node (html.style { padding: "8px 12px" }) [
-      eventLine "NOW" "•" current.lastEvent "#dbe9f4",
-      eventLine "23:38" "▲" "カップ麺コーナーの在庫が少なくなっています" "#f0b74b",
-      eventLine "23:31" "◆" "不審な人物を警備員が注意しました" "#d9e4ec",
-      eventLine "23:20" "▥" "深夜の混雑時間帯に入ります（+15% 来客）" "#8fcaff",
-      eventLine "23:12" "♨" "冷凍庫の温度が上昇しています（+1.2℃）" "#f06860"
-    ]
-  ]
-
-fn controlStyle active: Bool -> html.Style = html.style {
-  minHeight: "96px",
-  border: if active then "1px solid #5abcf7" else "1px solid #214761",
-  borderRadius: "8px",
-  background: if active then "linear-gradient(180deg, #0d3955, #0a2336)" else "linear-gradient(180deg, #0b2235, #081a2a)",
-  color: "#dbeaf7",
-  cursor: "pointer",
-  fontSize: "12px",
-  fontWeight: "800"
-}
-
-fn quickControls state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  node panelStyle [
-    text panelHeaderStyle "クイックコントロール",
-    node (html.style { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "7px", padding: "10px" }) [
-      actionButton state (controlStyle False) "▶  1分進める" (Advance 1),
-      actionButton state (controlStyle False) "◴  5分進める" (Advance 5),
-      actionButton state (controlStyle current.paused) (if current.paused then "▶  再開" else "Ⅱ  一時停止") TogglePause,
-      actionButton state (controlStyle False) "☾+  1時間進める" (Advance 60),
-      actionButton state (controlStyle current.nightMode) "◉  深夜モード" ToggleNightMode
-    ]
-  ]
-
-fn summaryRow label: String -> value: String -> html.Html<Task<Unit>> =
-  node (html.style { display: "flex", justifyContent: "space-between", gap: "12px" }) [
-    text (html.style {}) label,
-    text (html.style { color: "#d9e7f2" }) value
-  ]
-
-fn dailySummary current: GameState -> html.Html<Task<Unit>> =
-  node panelStyle [
-    text panelHeaderStyle "本日のまとめ（4/15）",
-    node (html.style { display: "grid", gap: "8px", padding: "11px 13px", color: "#9fb4c5", fontSize: "11px" }) [
-      summaryRow "来客数" "432人",
-      summaryRow "平均客単価" "¥827",
-      summaryRow "廃棄ロス" "¥4,210",
-      summaryRow "電気代（予測）" "¥8,760",
-      summaryRow "現在満足度" (percent current.satisfaction)
+fn game state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+  node (html.style {
+    minHeight: "100vh",
+    maxWidth: "480px",
+    marginLeft: "auto",
+    marginRight: "auto",
+    background: "#07141d",
+    color: "#e8f4f8",
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    boxShadow: "0 0 70px rgba(0,0,0,0.45)"
+  }) [
+    hud current,
+    node (html.style {
+      padding: "7px 12px",
+      background: "#0a1c27",
+      color: "#9fb7c5",
+      fontSize: "11px",
+      whiteSpace: "nowrap",
+      overflow: "hidden"
+    }) [
+      text (html.style { color: if current.combo >= 3 then "#ffd46f" else "#9fb7c5", fontWeight: "800" }) `TURN ${current.tick}/24  ·  COMBO x${current.combo}  ·  ${current.lastEvent}`
+    ],
+    world state current,
+    node (html.style {
+      position: "sticky",
+      bottom: "0",
+      zIndex: "200",
+      padding: "12px",
+      background: "linear-gradient(180deg, rgba(7,20,29,0.96), #061018)",
+      borderTop: "1px solid rgba(102,214,255,0.16)",
+      boxShadow: "0 -14px 32px rgba(0,0,0,0.28)"
+    }) [
+      text (html.style { fontSize: "15px", fontWeight: "900" }) (targetTitle current),
+      text (html.style { marginTop: "3px", marginBottom: "10px", color: "#8fa8b7", fontSize: "11px", lineHeight: "1.45" }) (targetSub current),
+      controls state current
     ]
   ]
 
 fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
-  node appStyle [
-    topBar state current,
-    node bodyGridStyle [leftSidebar state, storePanel state current, rightSidebar state current],
-    node bottomGridStyle [eventLog current, quickControls state current, dailySummary current]
-  ]
+  if current.tick >= 24 then result state current else game state current
 
 fn perform action: Task<Unit> -> Task<Unit> = action
 
