@@ -33,7 +33,7 @@ jobs:
               ;;
           esac
 
-      - name: Sweep merged short-lived branches
+      - name: Sweep merge-commit branches
         if: github.event_name == 'push'
         run: |
           cd .branch-cleanup
@@ -50,3 +50,15 @@ jobs:
                   ;;
               esac
             done
+
+      - name: Remove historical squash-merged branches
+        if: github.event_name == 'push'
+        run: |
+          cd .branch-cleanup
+          for branch in \
+            ci/validate-initial-slice \
+            feat/pixel-store \
+            fix/crisp-sprite-atlas
+          do
+            git push origin --delete "$branch" || true
+          done
