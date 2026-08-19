@@ -623,7 +623,7 @@ fn page state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<
       gap: "12px"
     }) [
       topBar current,
-      node (html.style { padding: "9px 11px", borderRadius: "12px", background: "#0a1a26", color: "#b8cfdd", fontSize: "11px" }) current.lastEvent,
+      text (html.style { padding: "9px 11px", borderRadius: "12px", background: "#0a1a26", color: "#b8cfdd", fontSize: "11px" }) current.lastEvent,
       world state current,
       if current.turn >= 24 then resultPanel state current
       else node (html.style {
