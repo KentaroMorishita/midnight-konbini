@@ -1,12 +1,13 @@
 {
   "tileSize": 16,
   "renderScale": 3,
+  "productionTileSize": 48,
   "fixtures": {
     "shelf_snack": {
       "tilesW": 3,
       "tilesH": 1,
-      "nativeWidth": 144,
-      "nativeHeight": 48,
+      "width": 144,
+      "height": 48,
       "path": "/sprites/fixtures/shelf_snack.png"
     }
   },
@@ -14,10 +15,17 @@
     "clerk_male": {
       "frameWidth": 48,
       "frameHeight": 96,
-      "sheetWidth": 144,
-      "sheetHeight": 384,
-      "directions": ["down", "left", "right", "up"],
+      "columns": 3,
+      "rows": 4,
+      "directions": [
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
       "framesPerDirection": 3,
+      "width": 144,
+      "height": 384,
       "path": "/sprites/characters/clerk_male_sheet.png"
     }
   }
