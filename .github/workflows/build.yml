@@ -22,7 +22,13 @@ jobs:
         run: cargo install --git https://github.com/KentaroMorishita/seseragi --locked seseragi-cli
 
       - name: Build web app
-        run: seseragi build .
+        run: |
+          seseragi build .
+          if [ -d public ]; then
+            cp -R public/. dist/
+          fi
+          test -f dist/sprites/characters/clerk_male_sheet.png
+          test -f dist/sprites/fixtures/shelf_snack.png
 
       - name: Deploy to Vercel
         if: github.event_name != 'pull_request' && env.VERCEL_TOKEN != ''
