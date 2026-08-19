@@ -20,6 +20,12 @@ seseragi build .
 
 `main` へのpushでGitHub ActionsがSeseragiのproduction buildを作成し、`VERCEL_TOKEN`が設定されていればVercelへproduction deployします。
 
+## Pixel asset specification
+
+実装用ピクセルアセットの正本は [`docs/pixel-asset-spec.md`](docs/pixel-asset-spec.md) を参照してください。
+
+fixture / character sprite sheet / portrait の寸法、透過、視点、命名、アニメーション構造、品質ゲートはこの仕様を基準にします。
+
 ## Current slice
 
 - 2D top-down convenience-store floor built from DOM elements
