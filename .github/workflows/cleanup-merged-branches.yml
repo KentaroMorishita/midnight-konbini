@@ -1,0 +1,40 @@
+name: cleanup-merged-branches
+
+on:
+  pull_request:
+    types: [closed]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-merged-branches.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure authenticated remote
+        run: |
+          git init .branch-cleanup
+          cd .branch-cleanup
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+
+      - name: Delete merged PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          cd .branch-cleanup
+          git push origin --delete "$BRANCH" || true
+
+      - name: Clean initial stale NPC branches
+        if: github.event_name == 'push'
+        run: |
+          cd .branch-cleanup
+          for branch in feat/npc-world-simulation feat/npc-world-simulation-v2; do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
