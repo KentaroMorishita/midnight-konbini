@@ -27,14 +27,28 @@ jobs:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           cd .branch-cleanup
-          git push origin --delete "$BRANCH" || true
+          case "$BRANCH" in
+            feat/*|fix/*|ci/*|chore/*)
+              git push origin --delete "$BRANCH" || true
+              ;;
+          esac
 
-      - name: Clean initial stale NPC branches
+      - name: Sweep merged short-lived branches
         if: github.event_name == 'push'
         run: |
           cd .branch-cleanup
-          for branch in feat/npc-world-simulation feat/npc-world-simulation-v2; do
-            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-              git push origin --delete "$branch"
-            fi
-          done
+          git fetch origin "+refs/heads/*:refs/remotes/origin/*"
+
+          git for-each-ref \
+            --format='%(refname:short)' \
+            --merged=refs/remotes/origin/main \
+            'refs/remotes/origin/*' \
+          | while read -r ref; do
+              branch="${ref#origin/}"
+              case "$branch" in
+                main|HEAD) ;;
+                feat/*|fix/*|ci/*|chore/*)
+                  git push origin --delete "$branch" || true
+                  ;;
+              esac
+            done
