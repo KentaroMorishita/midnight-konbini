@@ -1,0 +1,1 @@
+Implementation starts on `feat/mobile-game-v2`. The old dashboard UI is not a compatibility target. See `mobile-game-design-v2.md` for the canonical game design.
