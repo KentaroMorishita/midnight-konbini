@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - "tmp/*.zip"
-      - ".github/workflows/unpack-assets.yml"
 
 permissions:
   contents: write
@@ -15,20 +14,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack uploaded asset bundle
+      - name: Unpack uploaded asset bundles
         run: |
           set -euxo pipefail
-          ZIP="tmp/midnight-konbini-assets-v1.zip"
-          test -f "$ZIP"
-          unzip -o "$ZIP" -d .
-          rm -f "$ZIP" tmp/.gitkeep README_ASSETS.md
+          shopt -s nullglob
+          zips=(tmp/*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "No ZIP bundles found"
+            exit 0
+          fi
+          for zip in "${zips[@]}"; do
+            unzip -o "$zip" -d .
+            rm -f "$zip"
+          done
+          rm -f README_ASSETS.md
+          mkdir -p tmp
+          touch tmp/.gitkeep
 
       - name: Commit unpacked assets
         run: |
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A public/sprites assets/manifest.json tmp
+          git add -A public/sprites assets tmp
           if git diff --cached --quiet; then
             echo "No asset changes to commit"
             exit 0
