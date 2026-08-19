@@ -64,7 +64,7 @@ fn walkFrame value: Int -> Int =
   else if value == 1 then 2
   else walkFrame (value - 2)
 
-fn routePose seed: Int -> tick: Int -> Pose =
+fn routePose seed: Int -> tick: Int -> Pose = {
   let t = wrapTick (tick + seed)
   if t < 4 then
     Pose { x: 15, y: 20 - t, direction: Up, frame: walkFrame t }
@@ -78,6 +78,7 @@ fn routePose seed: Int -> tick: Int -> Pose =
     Pose { x: 7, y: 12 + (t - 16), direction: Down, frame: walkFrame t }
   else
     Pose { x: 7 + (t - 20) * 2, y: 16, direction: Right, frame: walkFrame t }
+}
 
 fn clerkPose -> Pose = Pose { x: 6, y: 17, direction: Down, frame: 0 }
 fn clerkFemalePose -> Pose = Pose { x: 8, y: 17, direction: Left, frame: 0 }
@@ -161,7 +162,7 @@ fn actor state: MutableSignal<GameState>
   -> path: String
   -> pose: Pose
   -> selectable: Bool
-  -> html.Html<Task<Unit>> =
+  -> html.Html<Task<Unit>> = {
   let selected = selectable && current.selectedCustomer == id
   let row = directionRow pose.direction
   html.button {
@@ -188,6 +189,7 @@ fn actor state: MutableSignal<GameState>
     },
     children: ""
   }
+}
 
 fn floor current: GameState -> html.Html<Task<Unit>> =
   node (html.style {
@@ -232,7 +234,7 @@ fn floor current: GameState -> html.Html<Task<Unit>> =
     })
   ]
 
-fn storeWorld state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> =
+fn storeWorld state: MutableSignal<GameState> -> current: GameState -> html.Html<Task<Unit>> = {
   let office = routePose 0 current.tick
   let adult = routePose 8 current.tick
   let student = routePose 16 current.tick
@@ -255,6 +257,7 @@ fn storeWorld state: MutableSignal<GameState> -> current: GameState -> html.Html
     actor state current 9 (shopperFemaleAdult ()) adult True,
     actor state current 12 (shopperMaleStudent ()) student True
   ]
+}
 
 fn actionButton state: MutableSignal<GameState>
   -> label: String
